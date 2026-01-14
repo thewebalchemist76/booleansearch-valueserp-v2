@@ -1,6 +1,5 @@
 // frontend/src/Search.jsx
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import './App.css'
 import { useNavigate, Link } from 'react-router-dom'
