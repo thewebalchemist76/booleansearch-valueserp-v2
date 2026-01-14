@@ -61,7 +61,7 @@ export default function Search() {
   }
 
   const goDashboard = () => {
-    navigate('/dashboard', { replace: true })
+    navigate('/dashboard')
   }
 
   const normalizeDomain = (domain) => {
