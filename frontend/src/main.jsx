@@ -1,4 +1,4 @@
-// frontend/src/main.jsx
+// frontend/src/main.jsx 2
 import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
@@ -49,12 +49,12 @@ function Root() {
         />
 
         <Route
-          
           path="/dashboard"
           element={
             <ProtectedRoute session={session} adminOnly={true}>
               <Dashboard />
             </ProtectedRoute>
+          }
         />
 
         <Route
