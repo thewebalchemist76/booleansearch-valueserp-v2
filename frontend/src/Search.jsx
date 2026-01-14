@@ -225,18 +225,9 @@ export default function Search() {
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
 
               {adminChecked && isAdmin && (
-                <Link
-                  to="/dashboard"
-                  className="download-button"
-                  style={{ textDecoration: 'none' }}
-                  onClick={(e) => {
-                    // fallback: se per qualunque motivo il Link non naviga al primo colpo
-                    e.preventDefault()
-                    navigate('/dashboard')
-                  }}
-                >
+                <a href="/dashboard" className="download-button" style={{ textDecoration: 'none' }}>
                   Dashboard
-                </Link>
+                </a>
               )}
 
               <button className="download-button" onClick={logout} disabled={isSearching}>
