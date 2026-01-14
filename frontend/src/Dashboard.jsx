@@ -107,7 +107,7 @@ export default function Dashboard() {
 
     const { data, error } = await supabase
       .from('project_sites')
-      .select('id,domains')
+      .select('project_id,domains')
       .eq('project_id', pid)
       .maybeSingle()
 
@@ -119,8 +119,30 @@ export default function Dashboard() {
       return
     }
 
-    setSitesRowId(data?.id ?? null)
-    const domains = Array.isArray(data?.domains) ? data.domains : []
+    // Se non esiste, crealo
+    if (!data) {
+      const { data: created, error: insErr } = await supabase
+        .from('project_sites')
+        .insert([{ project_id: pid, domains: [] }])
+        .select('project_id,domains')
+        .maybeSingle()
+
+      if (insErr) {
+        setDomainsLoading(false)
+        setSitesRowId(null)
+        setDomainsText('')
+        setError(insErr.message)
+        return
+      }
+
+      setSitesRowId(created?.project_id ?? pid)
+      setDomainsText('')
+      setDomainsLoading(false)
+      return
+    }
+
+    setSitesRowId(data.project_id ?? pid)
+    const domains = Array.isArray(data.domains) ? data.domains : []
     setDomainsText(domains.join('\n'))
     setDomainsLoading(false)
   }
@@ -243,27 +265,24 @@ export default function Dashboard() {
       setError('Seleziona un progetto.')
       return
     }
-    if (!sitesRowId) {
-      setError('Record project_sites non trovato.')
-      return
-    }
 
     setSaving(true)
     setError(null)
 
     const domains = normalizeDomains(domainsText)
 
-    const { error } = await supabase
+    // se non c'è row, creala (project_sites PK = project_id)
+    const { error: upsertErr } = await supabase
       .from('project_sites')
-      .update({ domains })
-      .eq('id', sitesRowId)
+      .upsert([{ project_id: selectedProjectId, domains }], { onConflict: 'project_id' })
 
-    if (error) {
+    if (upsertErr) {
       setSaving(false)
-      setError(error.message)
+      setError(upsertErr.message)
       return
     }
 
+    setSitesRowId(selectedProjectId)
     setDomainsText(domains.join('\n'))
     setSaving(false)
   }
