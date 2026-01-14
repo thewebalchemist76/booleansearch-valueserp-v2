@@ -5,6 +5,7 @@ import './App.css'
 import { useNavigate, Link } from 'react-router-dom'
 
 
+
 const API_URL = import.meta.env.VITE_API_URL
 
 export default function Search() {
@@ -222,8 +223,18 @@ export default function Search() {
             </div>
 
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+
               {adminChecked && isAdmin && (
-                <Link to="/dashboard" className="download-button">
+                <Link
+                  to="/dashboard"
+                  className="download-button"
+                  style={{ textDecoration: 'none' }}
+                  onClick={(e) => {
+                    // fallback: se per qualunque motivo il Link non naviga al primo colpo
+                    e.preventDefault()
+                    navigate('/dashboard')
+                  }}
+                >
                   Dashboard
                 </Link>
               )}
