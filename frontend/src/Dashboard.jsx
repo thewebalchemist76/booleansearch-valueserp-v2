@@ -43,6 +43,12 @@ export default function Dashboard() {
   const [sitesRowId, setSitesRowId] = useState(null)
   const [domainsLoading, setDomainsLoading] = useState(false)
 
+  // MEMBERS
+  const [members, setMembers] = useState([])
+  const [membersLoading, setMembersLoading] = useState(false)
+  const [newMemberUserId, setNewMemberUserId] = useState('')
+  const [newMemberRole, setNewMemberRole] = useState('member')
+
   const canCreate = useMemo(() => adminChecked && isAdmin, [adminChecked, isAdmin])
 
   const logout = async () => {
@@ -119,7 +125,6 @@ export default function Dashboard() {
       return
     }
 
-    // Se non esiste, crealo
     if (!data) {
       const { data: created, error: insErr } = await supabase
         .from('project_sites')
@@ -145,6 +150,28 @@ export default function Dashboard() {
     const domains = Array.isArray(data.domains) ? data.domains : []
     setDomainsText(domains.join('\n'))
     setDomainsLoading(false)
+  }
+
+  const loadMembersForProject = async (pid) => {
+    if (!pid) return
+    setMembersLoading(true)
+    setError(null)
+
+    const { data, error } = await supabase
+      .from('project_members')
+      .select('project_id,user_id,role,created_at')
+      .eq('project_id', pid)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      setMembersLoading(false)
+      setMembers([])
+      setError(error.message)
+      return
+    }
+
+    setMembers(data || [])
+    setMembersLoading(false)
   }
 
   useEffect(() => {
@@ -175,6 +202,7 @@ export default function Dashboard() {
     if (!isAdmin) return
     if (!selectedProjectId) return
     loadDomainsForProject(selectedProjectId)
+    loadMembersForProject(selectedProjectId)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminChecked, isAdmin, selectedProjectId])
 
@@ -271,7 +299,6 @@ export default function Dashboard() {
 
     const domains = normalizeDomains(domainsText)
 
-    // se non c'è row, creala (project_sites PK = project_id)
     const { error: upsertErr } = await supabase
       .from('project_sites')
       .upsert([{ project_id: selectedProjectId, domains }], { onConflict: 'project_id' })
@@ -284,6 +311,68 @@ export default function Dashboard() {
 
     setSitesRowId(selectedProjectId)
     setDomainsText(domains.join('\n'))
+    setSaving(false)
+  }
+
+  const addMember = async () => {
+    if (!isAdmin) return
+    if (!selectedProjectId) {
+      setError('Seleziona un progetto.')
+      return
+    }
+
+    const uid = newMemberUserId.trim()
+    if (!uid) {
+      setError('Inserisci un User ID.')
+      return
+    }
+
+    const role = (newMemberRole || 'member').trim() || 'member'
+
+    setSaving(true)
+    setError(null)
+
+    const { error } = await supabase
+      .from('project_members')
+      .upsert([{ project_id: selectedProjectId, user_id: uid, role }], { onConflict: 'project_id,user_id' })
+
+    if (error) {
+      setSaving(false)
+      setError(error.message)
+      return
+    }
+
+    setNewMemberUserId('')
+    await loadMembersForProject(selectedProjectId)
+    setSaving(false)
+  }
+
+  const removeMember = async (uid) => {
+    if (!isAdmin) return
+    if (!selectedProjectId) {
+      setError('Seleziona un progetto.')
+      return
+    }
+
+    const ok = window.confirm('Rimuovere questo utente dal progetto?')
+    if (!ok) return
+
+    setSaving(true)
+    setError(null)
+
+    const { error } = await supabase
+      .from('project_members')
+      .delete()
+      .eq('project_id', selectedProjectId)
+      .eq('user_id', uid)
+
+    if (error) {
+      setSaving(false)
+      setError(error.message)
+      return
+    }
+
+    await loadMembersForProject(selectedProjectId)
     setSaving(false)
   }
 
@@ -312,6 +401,7 @@ export default function Dashboard() {
     setSelectedProjectId(null)
     setSitesRowId(null)
     setDomainsText('')
+    setMembers([])
     navigate('/dashboard', { replace: true })
 
     await loadProjects()
@@ -433,7 +523,94 @@ export default function Dashboard() {
             </div>
           )}
 
-          {/* Dettaglio progetto: DOMINI (solo TL/Admin) */}
+          {/* Dettaglio progetto: MEMBRI */}
+          {selectedProjectId && (
+            <div className="form-section" style={{ marginTop: 10, marginBottom: 18 }}>
+              <div className="results-header" style={{ marginBottom: 10 }}>
+                <h3 style={{ margin: 0, fontSize: '1.05rem' }}>Membri del progetto</h3>
+              </div>
+
+              <div className="input-group" style={{ marginBottom: 10 }}>
+                <label htmlFor="memberUserId">Aggiungi membro (User ID)</label>
+                <input
+                  id="memberUserId"
+                  value={newMemberUserId}
+                  onChange={(e) => setNewMemberUserId(e.target.value)}
+                  disabled={saving}
+                  style={{
+                    width: '100%',
+                    padding: 12,
+                    border: '2px solid #e5e7eb',
+                    borderRadius: 8,
+                    fontSize: '0.95rem',
+                  }}
+                  placeholder="es: 42eba519-3d0f-4cbe-918a-..."
+                />
+                <small>Per ora usa lo User ID (uuid) dell’utente non-TL.</small>
+              </div>
+
+              <div className="input-group" style={{ marginBottom: 10 }}>
+                <label htmlFor="memberRole">Ruolo</label>
+                <select
+                  id="memberRole"
+                  value={newMemberRole}
+                  onChange={(e) => setNewMemberRole(e.target.value)}
+                  disabled={saving}
+                  style={{ width: '100%', padding: 12, borderRadius: 8 }}
+                >
+                  <option value="member">member</option>
+                  <option value="owner">owner</option>
+                </select>
+                <small>member = può usare Search. owner = vede Dashboard/Search come TL.</small>
+              </div>
+
+              <button className="search-button" onClick={addMember} disabled={saving || !newMemberUserId.trim()}>
+                {saving ? '⏳ Salvataggio...' : '➕ Aggiungi membro'}
+              </button>
+
+              <div style={{ marginTop: 14 }}>
+                {membersLoading ? (
+                  <p>Caricamento membri...</p>
+                ) : members.length === 0 ? (
+                  <p>Nessun membro trovato.</p>
+                ) : (
+                  <div className="results-table-container">
+                    <table className="results-table">
+                      <thead>
+                        <tr>
+                          <th>User ID</th>
+                          <th>Ruolo</th>
+                          <th>Creato</th>
+                          <th></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {members.map((m) => (
+                          <tr key={`${m.project_id}-${m.user_id}`} className="success-row">
+                            <td style={{ fontFamily: 'monospace' }}>{m.user_id}</td>
+                            <td>{m.role}</td>
+                            <td>{m.created_at ? new Date(m.created_at).toLocaleString('it-IT') : '-'}</td>
+                            <td style={{ textAlign: 'right' }}>
+                              <button
+                                className="download-button"
+                                onClick={() => removeMember(m.user_id)}
+                                disabled={saving}
+                                title="Rimuovi membro"
+                              >
+                                Rimuovi
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Dettaglio progetto: DOMINI */}
           {selectedProjectId && (
             <div className="form-section" style={{ marginTop: 10 }}>
               <div className="results-header" style={{ marginBottom: 10 }}>
