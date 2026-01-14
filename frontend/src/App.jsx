@@ -184,6 +184,12 @@ function App() {
           <p className="subtitle">Cerca articoli su più domini con ricerca booleana Google</p>
           <p className="info-text">⚡ Ogni ricerca richiede ~1-2 secondi • Powered by ValueSERP</p>
 
+          <p style={{ marginTop: 10 }}>
+            <a href="/dashboard">Dashboard</a>
+          </p>
+
+
+
           <button className="download-button" onClick={handleLogout} style={{ marginTop: 12 }}>
             Logout
           </button>
