@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import './App.css'
+import { supabase } from './supabaseClient'
 
 // Get API URL from environment or use production URL
 const API_URL = import.meta.env.VITE_API_URL || 'https://YOUR-BACKEND-URL.onrender.com'
@@ -12,9 +13,15 @@ function App() {
   const [results, setResults] = useState([])
   const [error, setError] = useState(null)
 
+  const handleLogout = async () => {
+    await supabase.auth.signOut()
+    window.location.href = '/login'
+  }
+
   const normalizeDomain = (domain) => {
     if (!domain) return ''
-    let cleaned = domain.trim()
+    let cleaned = domain
+      .trim()
       .replace(/^https?:\/\//i, '')
       .replace(/^www\./i, '')
       .replace(/\/$/, '')
@@ -25,8 +32,8 @@ function App() {
   const parseInput = (input) => {
     return input
       .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
   }
 
   const handleSearch = async () => {
@@ -40,7 +47,7 @@ function App() {
     setResults([])
     setProgress(0)
 
-    const domainList = parseInput(domains).map(normalizeDomain).filter(d => d)
+    const domainList = parseInput(domains).map(normalizeDomain).filter((d) => d)
     const articleList = parseInput(articles)
 
     if (domainList.length === 0 || articleList.length === 0) {
@@ -50,12 +57,12 @@ function App() {
     }
 
     const totalSearches = domainList.length * articleList.length
-    
+
     if (totalSearches > 50) {
       const confirmed = window.confirm(
         `Stai per fare ${totalSearches} ricerche.\n\n` +
-        `Tempo stimato: ${Math.round(totalSearches * 2 / 60)} minuti.\n\n` +
-        `Vuoi continuare?`
+          `Tempo stimato: ${Math.round((totalSearches * 2) / 60)} minuti.\n\n` +
+          `Vuoi continuare?`
       )
       if (!confirmed) {
         setIsSearching(false)
@@ -70,9 +77,7 @@ function App() {
       for (const article of articleList) {
         for (const domain of domainList) {
           try {
-            const apiEndpoint = import.meta.env.DEV 
-              ? '/api/search' 
-              : `${API_URL}/api/search`
+            const apiEndpoint = import.meta.env.DEV ? '/api/search' : `${API_URL}/api/search`
 
             const response = await fetch(apiEndpoint, {
               method: 'POST',
@@ -86,7 +91,7 @@ function App() {
             })
 
             const data = await response.json()
-            
+
             searchResults.push({
               domain,
               article,
@@ -100,7 +105,6 @@ function App() {
             completed++
             setProgress(Math.round((completed / totalSearches) * 100))
             setResults([...searchResults])
-            
           } catch (err) {
             searchResults.push({
               domain,
@@ -118,7 +122,7 @@ function App() {
           }
 
           // 2 second delay between requests to be respectful to ValueSERP
-          await new Promise(resolve => setTimeout(resolve, 2000))
+          await new Promise((resolve) => setTimeout(resolve, 2000))
         }
       }
 
@@ -134,25 +138,31 @@ function App() {
     if (results.length === 0) return
 
     const headers = ['Dominio', 'Articolo', 'Query di Ricerca', 'Link Articolo', 'Titolo', 'Descrizione', 'Errore']
-    const rows = results.map(r => [
+    const rows = results.map((r) => [
       r.domain,
       r.article,
       r.searchQuery,
       r.url,
       r.title,
       r.description || '',
-      r.error || ''
+      r.error || '',
     ])
 
     const csvContent = [
       headers.join(','),
-      ...rows.map(row => row.map(cell => {
-        const str = String(cell || '')
-        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-          return `"${str.replace(/"/g, '""')}"`
-        }
-        return str
-      }).join(','))
+      ...rows
+        .map((row) =>
+          row
+            .map((cell) => {
+              const str = String(cell || '')
+              if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                return `"${str.replace(/"/g, '""')}"`
+              }
+              return str
+            })
+            .join(',')
+        )
+        .join('\n'),
     ].join('\n')
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
@@ -162,9 +172,9 @@ function App() {
     link.click()
   }
 
-  const successCount = results.filter(r => r.url && !r.error).length
-  const errorCount = results.filter(r => r.error).length
-  const notFoundCount = results.filter(r => !r.url && !r.error).length
+  const successCount = results.filter((r) => r.url && !r.error).length
+  const errorCount = results.filter((r) => r.error).length
+  const notFoundCount = results.filter((r) => !r.url && !r.error).length
 
   return (
     <div className="app">
@@ -173,6 +183,10 @@ function App() {
           <h1>🔍 Boolean Search - Google via ValueSERP</h1>
           <p className="subtitle">Cerca articoli su più domini con ricerca booleana Google</p>
           <p className="info-text">⚡ Ogni ricerca richiede ~1-2 secondi • Powered by ValueSERP</p>
+
+          <button className="download-button" onClick={handleLogout} style={{ marginTop: 12 }}>
+            Logout
+          </button>
         </header>
 
         <div className="form-section">
@@ -207,20 +221,12 @@ function App() {
             />
           </div>
 
-          <button
-            className="search-button"
-            onClick={handleSearch}
-            disabled={isSearching || !domains.trim() || !articles.trim()}
-          >
+          <button className="search-button" onClick={handleSearch} disabled={isSearching || !domains.trim() || !articles.trim()}>
             {isSearching ? '⏳ Ricerca in corso...' : '🚀 Avvia Ricerca'}
           </button>
         </div>
 
-        {error && (
-          <div className="error-message">
-            ⚠️ {error}
-          </div>
-        )}
+        {error && <div className="error-message">⚠️ {error}</div>}
 
         {isSearching && (
           <div className="progress-section">
@@ -228,7 +234,7 @@ function App() {
               <div className="progress-bar" style={{ width: `${progress}%` }}></div>
             </div>
             <p className="progress-text">
-              {progress}% completato 
+              {progress}% completato
               {results.length > 0 && ` - ${results.length} ricerche completate`}
             </p>
           </div>
