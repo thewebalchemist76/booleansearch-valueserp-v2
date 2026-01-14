@@ -1,16 +1,25 @@
 // frontend/src/Search.jsx
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from './supabaseClient'
 import './App.css'
 
 const API_URL = import.meta.env.VITE_API_URL
 
 export default function Search() {
+  const navigate = useNavigate()
+
   const [domains, setDomains] = useState('')
   const [articles, setArticles] = useState('')
   const [isSearching, setIsSearching] = useState(false)
   const [progress, setProgress] = useState(0)
   const [results, setResults] = useState([])
   const [error, setError] = useState(null)
+
+  const logout = async () => {
+    await supabase.auth.signOut()
+    navigate('/login', { replace: true })
+  }
 
   const normalizeDomain = (domain) => {
     if (!domain) return ''
@@ -161,9 +170,17 @@ export default function Search() {
     <div className="app">
       <div className="container">
         <header className="header">
-          <h1>🔍 Boolean Search - Google via ValueSERP</h1>
-          <p className="subtitle">Cerca articoli su più domini con ricerca booleana Google</p>
-          <p className="info-text">⚡ Ogni ricerca richiede ~1-2 secondi • Powered by ValueSERP</p>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
+            <div>
+              <h1>🔍 Boolean Search - Google via ValueSERP</h1>
+              <p className="subtitle">Cerca articoli su più domini con ricerca booleana Google</p>
+              <p className="info-text">⚡ Ogni ricerca richiede ~1-2 secondi • Powered by ValueSERP</p>
+            </div>
+
+            <button className="download-button" onClick={logout} disabled={isSearching}>
+              Logout
+            </button>
+          </div>
         </header>
 
         <div className="form-section">
@@ -198,7 +215,11 @@ export default function Search() {
             />
           </div>
 
-          <button className="search-button" onClick={handleSearch} disabled={isSearching || !domains.trim() || !articles.trim()}>
+          <button
+            className="search-button"
+            onClick={handleSearch}
+            disabled={isSearching || !domains.trim() || !articles.trim()}
+          >
             {isSearching ? '⏳ Ricerca in corso...' : '🚀 Avvia Ricerca'}
           </button>
         </div>
