@@ -5,44 +5,119 @@ import { supabase } from './supabaseClient'
 export default function Dashboard() {
   const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
   const [projects, setProjects] = useState([])
+  const [newProjectName, setNewProjectName] = useState('')
 
   const logout = async () => {
     await supabase.auth.signOut()
     navigate('/login', { replace: true })
   }
 
+  const loadProjects = async () => {
+    setLoading(true)
+    setError(null)
+
+    const { data, error } = await supabase
+      .from('projects')
+      .select('id,name,created_at')
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      setError(error.message)
+      setProjects([])
+    } else {
+      setProjects(data || [])
+    }
+
+    setLoading(false)
+  }
+
   useEffect(() => {
     let mounted = true
 
     const load = async () => {
-      setLoading(true)
-      setError(null)
-
-      const { data, error } = await supabase
-        .from('projects')
-        .select('id,name,created_at')
-        .order('created_at', { ascending: false })
-
-      if (!mounted) return
-
-      if (error) {
-        setError(error.message)
-        setProjects([])
-      } else {
-        setProjects(data || [])
-      }
-
-      setLoading(false)
+      await loadProjects()
     }
 
-    load()
+    if (mounted) load()
 
     return () => {
       mounted = false
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const createProject = async (e) => {
+    e.preventDefault()
+    const name = newProjectName.trim()
+    if (!name) {
+      setError('Inserisci un nome progetto')
+      return
+    }
+
+    setSaving(true)
+    setError(null)
+
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser()
+
+    if (userErr || !user) {
+      setSaving(false)
+      setError('Sessione non valida. Effettua di nuovo il login.')
+      navigate('/login', { replace: true })
+      return
+    }
+
+    // 1) create project
+    const { data: createdProjects, error: createErr } = await supabase
+      .from('projects')
+      .insert([{ name, created_by: user.id }])
+      .select('id,name,created_at')
+      .limit(1)
+
+    if (createErr) {
+      setSaving(false)
+      setError(createErr.message)
+      return
+    }
+
+    const project = createdProjects?.[0]
+    if (!project?.id) {
+      setSaving(false)
+      setError('Errore: progetto non creato correttamente')
+      return
+    }
+
+    // 2) add membership (owner)
+    const { error: memberErr } = await supabase
+      .from('project_members')
+      .insert([{ project_id: project.id, user_id: user.id, role: 'owner' }])
+
+    if (memberErr) {
+      setSaving(false)
+      setError(memberErr.message)
+      return
+    }
+
+    // 3) init sites row
+    const { error: sitesErr } = await supabase
+      .from('project_sites')
+      .insert([{ project_id: project.id, domains: [] }])
+
+    if (sitesErr) {
+      setSaving(false)
+      setError(sitesErr.message)
+      return
+    }
+
+    setNewProjectName('')
+    await loadProjects()
+    setSaving(false)
+  }
 
   return (
     <div className="app">
@@ -56,6 +131,35 @@ export default function Dashboard() {
           </div>
 
           {error && <div className="error-message">⚠️ {error}</div>}
+
+          <div className="form-section" style={{ marginBottom: 20 }}>
+            <div className="input-group" style={{ marginBottom: 12 }}>
+              <label htmlFor="projectName">Nuovo progetto</label>
+              <input
+                id="projectName"
+                value={newProjectName}
+                onChange={(e) => setNewProjectName(e.target.value)}
+                placeholder="Es. Cliente ABC"
+                disabled={saving}
+                style={{
+                  width: '100%',
+                  padding: 12,
+                  border: '2px solid #e5e7eb',
+                  borderRadius: 8,
+                  fontSize: '0.95rem',
+                }}
+              />
+              <small>Il progetto sarà visibile solo ai membri autorizzati.</small>
+            </div>
+
+            <button
+              className="search-button"
+              onClick={createProject}
+              disabled={saving || !newProjectName.trim()}
+            >
+              {saving ? '⏳ Creazione...' : '➕ Crea progetto'}
+            </button>
+          </div>
 
           {loading ? (
             <p>Caricamento...</p>
