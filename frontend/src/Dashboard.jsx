@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 
@@ -9,11 +9,15 @@ export default function Dashboard() {
   const [error, setError] = useState(null)
   const [projects, setProjects] = useState([])
   const [newProjectName, setNewProjectName] = useState('')
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [adminChecked, setAdminChecked] = useState(false)
 
   const logout = async () => {
     await supabase.auth.signOut()
     navigate('/login', { replace: true })
   }
+
+  const canCreate = useMemo(() => isAdmin && adminChecked, [isAdmin, adminChecked])
 
   const loadProjects = async () => {
     setLoading(true)
@@ -34,14 +38,44 @@ export default function Dashboard() {
     setLoading(false)
   }
 
+  const checkAdmin = async () => {
+    setAdminChecked(false)
+    const {
+      data: { user },
+      error: userErr,
+    } = await supabase.auth.getUser()
+
+    if (userErr || !user) {
+      setIsAdmin(false)
+      setAdminChecked(true)
+      return
+    }
+
+    const { data, error } = await supabase
+      .from('admin_users')
+      .select('user_id')
+      .eq('user_id', user.id)
+      .maybeSingle()
+
+    if (error) {
+      // se RLS/permessi bloccano la select, trattiamo come non-admin
+      setIsAdmin(false)
+    } else {
+      setIsAdmin(!!data)
+    }
+
+    setAdminChecked(true)
+  }
+
   useEffect(() => {
     let mounted = true
 
-    const load = async () => {
+    const init = async () => {
+      await checkAdmin()
       await loadProjects()
     }
 
-    if (mounted) load()
+    if (mounted) init()
 
     return () => {
       mounted = false
@@ -51,6 +85,11 @@ export default function Dashboard() {
 
   const createProject = async (e) => {
     e.preventDefault()
+    if (!canCreate) {
+      setError('Non hai i permessi per creare progetti.')
+      return
+    }
+
     const name = newProjectName.trim()
     if (!name) {
       setError('Inserisci un nome progetto')
@@ -72,7 +111,6 @@ export default function Dashboard() {
       return
     }
 
-    // 1) create project
     const { data: createdProjects, error: createErr } = await supabase
       .from('projects')
       .insert([{ name, created_by: user.id }])
@@ -92,7 +130,6 @@ export default function Dashboard() {
       return
     }
 
-    // 2) add membership (owner)
     const { error: memberErr } = await supabase
       .from('project_members')
       .insert([{ project_id: project.id, user_id: user.id, role: 'owner' }])
@@ -103,7 +140,6 @@ export default function Dashboard() {
       return
     }
 
-    // 3) init sites row
     const { error: sitesErr } = await supabase
       .from('project_sites')
       .insert([{ project_id: project.id, domains: [] }])
@@ -132,34 +168,42 @@ export default function Dashboard() {
 
           {error && <div className="error-message">⚠️ {error}</div>}
 
-          <div className="form-section" style={{ marginBottom: 20 }}>
-            <div className="input-group" style={{ marginBottom: 12 }}>
-              <label htmlFor="projectName">Nuovo progetto</label>
-              <input
-                id="projectName"
-                value={newProjectName}
-                onChange={(e) => setNewProjectName(e.target.value)}
-                placeholder="Es. Cliente ABC"
-                disabled={saving}
-                style={{
-                  width: '100%',
-                  padding: 12,
-                  border: '2px solid #e5e7eb',
-                  borderRadius: 8,
-                  fontSize: '0.95rem',
-                }}
-              />
-              <small>Il progetto sarà visibile solo ai membri autorizzati.</small>
+          {adminChecked && !isAdmin && (
+            <div className="progress-section" style={{ marginBottom: 20 }}>
+              <p className="progress-text">Accesso limitato: non puoi creare progetti.</p>
             </div>
+          )}
 
-            <button
-              className="search-button"
-              onClick={createProject}
-              disabled={saving || !newProjectName.trim()}
-            >
-              {saving ? '⏳ Creazione...' : '➕ Crea progetto'}
-            </button>
-          </div>
+          {canCreate && (
+            <div className="form-section" style={{ marginBottom: 20 }}>
+              <div className="input-group" style={{ marginBottom: 12 }}>
+                <label htmlFor="projectName">Nuovo progetto</label>
+                <input
+                  id="projectName"
+                  value={newProjectName}
+                  onChange={(e) => setNewProjectName(e.target.value)}
+                  placeholder="Es. Cliente ABC"
+                  disabled={saving}
+                  style={{
+                    width: '100%',
+                    padding: 12,
+                    border: '2px solid #e5e7eb',
+                    borderRadius: 8,
+                    fontSize: '0.95rem',
+                  }}
+                />
+                <small>Il progetto sarà visibile solo ai membri autorizzati.</small>
+              </div>
+
+              <button
+                className="search-button"
+                onClick={createProject}
+                disabled={saving || !newProjectName.trim()}
+              >
+                {saving ? '⏳ Creazione...' : '➕ Crea progetto'}
+              </button>
+            </div>
+          )}
 
           {loading ? (
             <p>Caricamento...</p>
