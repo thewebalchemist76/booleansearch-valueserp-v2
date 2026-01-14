@@ -42,11 +42,20 @@ export default function ProtectedRoute({ session, children, adminOnly = false })
     }
   }, [adminOnly])
 
-  if (!session) return <Navigate to="/login" replace />
-  if (adminOnly) {
-    if (checking) return null
-    if (!isAdmin) return <Navigate to="/search" replace />
+if (!session) return <Navigate to="/login" replace />
+
+if (adminOnly) {
+  if (checking) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <p>Caricamento dashboard…</p>
+      </div>
+    )
   }
+
+  if (!isAdmin) return <Navigate to="/search" replace />
+}
+
 
   return children
 }
