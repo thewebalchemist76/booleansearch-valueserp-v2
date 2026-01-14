@@ -1,4 +1,4 @@
-// frontend/src/main.jsx 2
+// frontend/src/main.jsx
 import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
@@ -40,14 +40,11 @@ function Root() {
   return (
     <BrowserRouter>
       <Routes>
-        {/* Home: se loggato vai a /search, altrimenti /login */}
         <Route path="/" element={session ? <Navigate to="/search" replace /> : <Navigate to="/login" replace />} />
 
-        <Route
-          path="/login"
-          element={session ? <Navigate to="/search" replace /> : <Login />}
-        />
+        <Route path="/login" element={session ? <Navigate to="/search" replace /> : <Login />} />
 
+        {/* TL/Admin only */}
         <Route
           path="/dashboard"
           element={
@@ -57,6 +54,17 @@ function Root() {
           }
         />
 
+        {/* TL/Admin only - dettaglio progetto */}
+        <Route
+          path="/dashboard/:projectId"
+          element={
+            <ProtectedRoute session={session} adminOnly={true}>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Qualsiasi utente loggato */}
         <Route
           path="/search"
           element={
@@ -66,9 +74,7 @@ function Root() {
           }
         />
 
-        {/* (Opzionale) tieni App raggiungibile per debug */}
         <Route path="/legacy" element={<App />} />
-
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
