@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import App from './App.jsx'
 import Login from './Login.jsx'
 import Dashboard from './Dashboard.jsx'
+import Search from './Search.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
 import { supabase } from './supabaseClient.js'
 
@@ -39,18 +40,12 @@ function Root() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute session={session}>
-              <App />
-            </ProtectedRoute>
-          }
-        />
+        {/* Home: se loggato vai a /search, altrimenti /login */}
+        <Route path="/" element={session ? <Navigate to="/search" replace /> : <Navigate to="/login" replace />} />
 
         <Route
           path="/login"
-          element={session ? <Navigate to="/dashboard" replace /> : <Login />}
+          element={session ? <Navigate to="/search" replace /> : <Login />}
         />
 
         <Route
@@ -61,6 +56,18 @@ function Root() {
             </ProtectedRoute>
           }
         />
+
+        <Route
+          path="/search"
+          element={
+            <ProtectedRoute session={session}>
+              <Search />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* (Opzionale) tieni App raggiungibile per debug */}
+        <Route path="/legacy" element={<App />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
