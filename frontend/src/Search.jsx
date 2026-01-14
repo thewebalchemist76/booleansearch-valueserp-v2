@@ -3,6 +3,8 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import './App.css'
+import { useNavigate, Link } from 'react-router-dom'
+
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -222,9 +224,9 @@ export default function Search() {
 
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               {adminChecked && isAdmin && (
-                <button className="download-button" onClick={goDashboard} disabled={isSearching}>
+                <Link to="/dashboard" className="download-button">
                   Dashboard
-                </button>
+                </Link>
               )}
 
               <button className="download-button" onClick={logout} disabled={isSearching}>
