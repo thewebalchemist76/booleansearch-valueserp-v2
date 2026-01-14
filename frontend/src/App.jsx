@@ -1,0 +1,298 @@
+import { useState } from 'react'
+import './App.css'
+
+// Get API URL from environment or use production URL
+const API_URL = import.meta.env.VITE_API_URL || 'https://YOUR-BACKEND-URL.onrender.com'
+
+function App() {
+  const [domains, setDomains] = useState('')
+  const [articles, setArticles] = useState('')
+  const [isSearching, setIsSearching] = useState(false)
+  const [progress, setProgress] = useState(0)
+  const [results, setResults] = useState([])
+  const [error, setError] = useState(null)
+
+  const normalizeDomain = (domain) => {
+    if (!domain) return ''
+    let cleaned = domain.trim()
+      .replace(/^https?:\/\//i, '')
+      .replace(/^www\./i, '')
+      .replace(/\/$/, '')
+      .split('/')[0]
+    return cleaned
+  }
+
+  const parseInput = (input) => {
+    return input
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+  }
+
+  const handleSearch = async () => {
+    if (!domains.trim() || !articles.trim()) {
+      setError('Inserisci almeno un dominio e un articolo')
+      return
+    }
+
+    setIsSearching(true)
+    setError(null)
+    setResults([])
+    setProgress(0)
+
+    const domainList = parseInput(domains).map(normalizeDomain).filter(d => d)
+    const articleList = parseInput(articles)
+
+    if (domainList.length === 0 || articleList.length === 0) {
+      setError('Inserisci almeno un dominio e un articolo validi')
+      setIsSearching(false)
+      return
+    }
+
+    const totalSearches = domainList.length * articleList.length
+    
+    if (totalSearches > 50) {
+      const confirmed = window.confirm(
+        `Stai per fare ${totalSearches} ricerche.\n\n` +
+        `Tempo stimato: ${Math.round(totalSearches * 2 / 60)} minuti.\n\n` +
+        `Vuoi continuare?`
+      )
+      if (!confirmed) {
+        setIsSearching(false)
+        return
+      }
+    }
+
+    let completed = 0
+    const searchResults = []
+
+    try {
+      for (const article of articleList) {
+        for (const domain of domainList) {
+          try {
+            const apiEndpoint = import.meta.env.DEV 
+              ? '/api/search' 
+              : `${API_URL}/api/search`
+
+            const response = await fetch(apiEndpoint, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                domain,
+                query: article,
+              }),
+            })
+
+            const data = await response.json()
+            
+            searchResults.push({
+              domain,
+              article,
+              searchQuery: `site:${domain} "${article}"`,
+              url: data.url || '',
+              title: data.title || '',
+              description: data.description || '',
+              error: data.error || null,
+            })
+
+            completed++
+            setProgress(Math.round((completed / totalSearches) * 100))
+            setResults([...searchResults])
+            
+          } catch (err) {
+            searchResults.push({
+              domain,
+              article,
+              searchQuery: `site:${domain} "${article}"`,
+              url: '',
+              title: '',
+              description: '',
+              error: err.message,
+            })
+
+            completed++
+            setProgress(Math.round((completed / totalSearches) * 100))
+            setResults([...searchResults])
+          }
+
+          // 2 second delay between requests to be respectful to ValueSERP
+          await new Promise(resolve => setTimeout(resolve, 2000))
+        }
+      }
+
+      setResults(searchResults)
+    } catch (err) {
+      setError(`Errore durante la ricerca: ${err.message}`)
+    } finally {
+      setIsSearching(false)
+    }
+  }
+
+  const downloadCSV = () => {
+    if (results.length === 0) return
+
+    const headers = ['Dominio', 'Articolo', 'Query di Ricerca', 'Link Articolo', 'Titolo', 'Descrizione', 'Errore']
+    const rows = results.map(r => [
+      r.domain,
+      r.article,
+      r.searchQuery,
+      r.url,
+      r.title,
+      r.description || '',
+      r.error || ''
+    ])
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => {
+        const str = String(cell || '')
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+          return `"${str.replace(/"/g, '""')}"`
+        }
+        return str
+      }).join(','))
+    ].join('\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    link.href = URL.createObjectURL(blob)
+    link.download = `ricerche_google_valueserp_${new Date().toISOString().split('T')[0]}.csv`
+    link.click()
+  }
+
+  const successCount = results.filter(r => r.url && !r.error).length
+  const errorCount = results.filter(r => r.error).length
+  const notFoundCount = results.filter(r => !r.url && !r.error).length
+
+  return (
+    <div className="app">
+      <div className="container">
+        <header className="header">
+          <h1>🔍 Boolean Search - Google via ValueSERP</h1>
+          <p className="subtitle">Cerca articoli su più domini con ricerca booleana Google</p>
+          <p className="info-text">⚡ Ogni ricerca richiede ~1-2 secondi • Powered by ValueSERP</p>
+        </header>
+
+        <div className="form-section">
+          <div className="input-group">
+            <label htmlFor="domains">
+              <span className="label-icon">🌐</span>
+              Domini (uno per riga)
+            </label>
+            <textarea
+              id="domains"
+              value={domains}
+              onChange={(e) => setDomains(e.target.value)}
+              placeholder="askanews.it&#10;quotidiano.net&#10;dailymotion.com&#10;..."
+              rows={8}
+              disabled={isSearching}
+            />
+            <small>I domini verranno puliti automaticamente.</small>
+          </div>
+
+          <div className="input-group">
+            <label htmlFor="articles">
+              <span className="label-icon">📰</span>
+              Titoli Articoli (uno per riga)
+            </label>
+            <textarea
+              id="articles"
+              value={articles}
+              onChange={(e) => setArticles(e.target.value)}
+              placeholder="Fujifilm Healthcare Italia: innovazione e AI a servizio della salute&#10;Titolo articolo 2&#10;..."
+              rows={8}
+              disabled={isSearching}
+            />
+          </div>
+
+          <button
+            className="search-button"
+            onClick={handleSearch}
+            disabled={isSearching || !domains.trim() || !articles.trim()}
+          >
+            {isSearching ? '⏳ Ricerca in corso...' : '🚀 Avvia Ricerca'}
+          </button>
+        </div>
+
+        {error && (
+          <div className="error-message">
+            ⚠️ {error}
+          </div>
+        )}
+
+        {isSearching && (
+          <div className="progress-section">
+            <div className="progress-bar-container">
+              <div className="progress-bar" style={{ width: `${progress}%` }}></div>
+            </div>
+            <p className="progress-text">
+              {progress}% completato 
+              {results.length > 0 && ` - ${results.length} ricerche completate`}
+            </p>
+          </div>
+        )}
+
+        {results.length > 0 && (
+          <div className="results-section">
+            <div className="results-header">
+              <h2>
+                Risultati ({results.length})
+                {!isSearching && (
+                  <span className="results-stats">
+                    <span className="stat-success">✅ {successCount}</span>
+                    <span className="stat-error">❌ {errorCount}</span>
+                    <span className="stat-notfound">🔍 {notFoundCount}</span>
+                  </span>
+                )}
+              </h2>
+              <button className="download-button" onClick={downloadCSV} disabled={isSearching}>
+                📥 Scarica CSV
+              </button>
+            </div>
+
+            <div className="results-table-container">
+              <table className="results-table">
+                <thead>
+                  <tr>
+                    <th>Dominio</th>
+                    <th>Articolo</th>
+                    <th>Link</th>
+                    <th>Titolo</th>
+                    <th>Stato</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {results.map((result, idx) => (
+                    <tr key={idx} className={result.error ? 'error-row' : result.url ? 'success-row' : ''}>
+                      <td>{result.domain}</td>
+                      <td className="article-cell">{result.article}</td>
+                      <td>
+                        {result.url ? (
+                          <a href={result.url} target="_blank" rel="noopener noreferrer">
+                            {result.url.length > 50 ? result.url.substring(0, 50) + '...' : result.url}
+                          </a>
+                        ) : (
+                          <span className="no-result">-</span>
+                        )}
+                      </td>
+                      <td className="title-cell">{result.title || '-'}</td>
+                      <td>
+                        {result.error && <span className="badge badge-error">❌ Errore</span>}
+                        {result.url && !result.error && <span className="badge badge-success">✅ Trovato</span>}
+                        {!result.url && !result.error && <span className="badge">🔍 Non trovato</span>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+export default App
