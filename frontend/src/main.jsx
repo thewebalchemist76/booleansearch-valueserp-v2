@@ -39,7 +39,14 @@ function Root() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={<App />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute session={session}>
+              <App />
+            </ProtectedRoute>
+          }
+        />
 
         <Route
           path="/login"
