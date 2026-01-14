@@ -49,12 +49,12 @@ function Root() {
         />
 
         <Route
+          
           path="/dashboard"
           element={
-            <ProtectedRoute session={session}>
+            <ProtectedRoute session={session} adminOnly={true}>
               <Dashboard />
             </ProtectedRoute>
-          }
         />
 
         <Route
