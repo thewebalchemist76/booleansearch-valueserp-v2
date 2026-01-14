@@ -1,8 +1,10 @@
 // frontend/src/Search.jsx
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import './App.css'
+import { useNavigate, Link } from 'react-router-dom'
+
+
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -75,9 +77,14 @@ export default function Search() {
     }
   }, [])
 
+
   const logout = async () => {
     await supabase.auth.signOut()
     navigate('/login', { replace: true })
+  }
+
+  const goDashboard = () => {
+    navigate('/dashboard')
   }
 
   const normalizeDomain = (domain) => {
@@ -98,17 +105,6 @@ export default function Search() {
       .filter((line) => line.length > 0)
 
   const handleSearch = async () => {
-    // Non-TL: per ora niente domini (li legheremo ai progetti nel prossimo step)
-    if (adminChecked && !isAdmin) {
-      if (!articles.trim()) {
-        setError('Inserisci almeno un articolo')
-        return
-      }
-      setError('I domini sono gestiti dal TL. (Prossimo step: domini caricati dal progetto)')
-      return
-    }
-
-    // TL: logica originale
     if (!domains.trim() || !articles.trim()) {
       setError('Inserisci almeno un dominio e un articolo')
       return
@@ -236,8 +232,6 @@ export default function Search() {
   const errorCount = results.filter((r) => r.error).length
   const notFoundCount = results.filter((r) => !r.url && !r.error).length
 
-  const isTL = adminChecked && isAdmin
-
   return (
     <div className="app">
       <div className="container">
@@ -249,30 +243,38 @@ export default function Search() {
               <p className="info-text">⚡ Ogni ricerca richiede ~1-2 secondi • Powered by ValueSERP</p>
             </div>
 
-            <button className="download-button" onClick={logout} disabled={isSearching}>
-              Logout
-            </button>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+
+              {adminChecked && isAdmin && (
+                <a href="/dashboard" className="download-button" style={{ textDecoration: 'none' }}>
+                  Dashboard
+                </a>
+              )}
+
+              <button className="download-button" onClick={logout} disabled={isSearching}>
+                Logout
+              </button>
+            </div>
           </div>
         </header>
 
-        <div className="form-section">
-          {isTL && (
-            <div className="input-group">
-              <label htmlFor="domains">
-                <span className="label-icon">🌐</span>
-                Domini (uno per riga)
-              </label>
-              <textarea
-                id="domains"
-                value={domains}
-                onChange={(e) => setDomains(e.target.value)}
-                placeholder={'askanews.it\nquotidiano.net\ndailymotion.com\n...'}
-                rows={8}
-                disabled={isSearching}
-              />
-              <small>I domini verranno puliti automaticamente.</small>
-            </div>
-          )}
+        {adminChecked && isAdmin && (
+          <div className="input-group">
+            <label htmlFor="domains">
+              <span className="label-icon">🌐</span>
+              Domini (uno per riga)
+            </label>
+            <textarea
+              id="domains"
+              value={domains}
+              onChange={(e) => setDomains(e.target.value)}
+              placeholder={'askanews.it\nquotidiano.net\ndailymotion.com\n...'}
+              rows={8}
+              disabled={isSearching}
+            />
+            <small>I domini verranno puliti automaticamente.</small>
+          </div>
+        )}
 
           <div className="input-group">
             <label htmlFor="articles">
@@ -292,7 +294,7 @@ export default function Search() {
           <button
             className="search-button"
             onClick={handleSearch}
-            disabled={isSearching || (isTL ? !domains.trim() || !articles.trim() : !articles.trim())}
+            disabled={isSearching || !domains.trim() || !articles.trim()}
           >
             {isSearching ? '⏳ Ricerca in corso...' : '🚀 Avvia Ricerca'}
           </button>
