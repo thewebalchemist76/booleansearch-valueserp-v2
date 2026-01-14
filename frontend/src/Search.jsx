@@ -258,7 +258,7 @@ export default function Search() {
           </div>
         </header>
 
-        {adminChecked && isAdmin && (
+        <div className="form-section">
           <div className="input-group">
             <label htmlFor="domains">
               <span className="label-icon">🌐</span>
@@ -274,7 +274,6 @@ export default function Search() {
             />
             <small>I domini verranno puliti automaticamente.</small>
           </div>
-        )}
 
           <div className="input-group">
             <label htmlFor="articles">
