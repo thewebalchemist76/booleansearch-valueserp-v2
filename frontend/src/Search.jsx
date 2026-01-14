@@ -18,9 +18,9 @@ export default function Search() {
 
   const [adminChecked, setAdminChecked] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
+
   const [userId, setUserId] = useState(null)
 
-  // Progetti/domìni da progetto (solo TL/OWNER)
   const [projects, setProjects] = useState([])
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [loadingProjects, setLoadingProjects] = useState(false)
@@ -88,26 +88,24 @@ export default function Search() {
   useEffect(() => {
     let mounted = true
 
-    const loadProjectsForOwner = async () => {
-      if (!adminChecked || !isAdmin || !userId) return
+    const loadMemberProjects = async () => {
+      if (!userId) return
 
       setLoadingProjects(true)
       setError(null)
 
-      // Progetti di cui l'utente è owner
       const { data: memberRows, error: memErr } = await supabase
         .from('project_members')
         .select('project_id')
         .eq('user_id', userId)
-        .eq('role', 'owner')
 
       if (!mounted) return
 
       if (memErr) {
-        setLoadingProjects(false)
         setProjects([])
         setSelectedProjectId('')
         setDomains('')
+        setLoadingProjects(false)
         setError(memErr.message)
         return
       }
@@ -115,10 +113,10 @@ export default function Search() {
       const ids = (memberRows || []).map((r) => r.project_id).filter(Boolean)
 
       if (ids.length === 0) {
-        setLoadingProjects(false)
         setProjects([])
         setSelectedProjectId('')
         setDomains('')
+        setLoadingProjects(false)
         return
       }
 
@@ -131,10 +129,10 @@ export default function Search() {
       if (!mounted) return
 
       if (projErr) {
-        setLoadingProjects(false)
         setProjects([])
         setSelectedProjectId('')
         setDomains('')
+        setLoadingProjects(false)
         setError(projErr.message)
         return
       }
@@ -142,7 +140,6 @@ export default function Search() {
       const list = projs || []
       setProjects(list)
 
-      // auto-seleziona il primo progetto se non selezionato
       if (!selectedProjectId && list.length > 0) {
         setSelectedProjectId(list[0].id)
       }
@@ -150,19 +147,18 @@ export default function Search() {
       setLoadingProjects(false)
     }
 
-    loadProjectsForOwner()
+    loadMemberProjects()
 
     return () => {
       mounted = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adminChecked, isAdmin, userId])
+  }, [userId])
 
   useEffect(() => {
     let mounted = true
 
     const loadDomainsFromProject = async () => {
-      if (!adminChecked || !isAdmin) return
       if (!selectedProjectId) {
         setDomains('')
         return
@@ -180,8 +176,8 @@ export default function Search() {
       if (!mounted) return
 
       if (sitesErr) {
-        setLoadingDomains(false)
         setDomains('')
+        setLoadingDomains(false)
         setError(sitesErr.message)
         return
       }
@@ -196,15 +192,11 @@ export default function Search() {
     return () => {
       mounted = false
     }
-  }, [adminChecked, isAdmin, selectedProjectId])
+  }, [selectedProjectId])
 
   const logout = async () => {
     await supabase.auth.signOut()
     navigate('/login', { replace: true })
-  }
-
-  const goDashboard = () => {
-    navigate('/dashboard')
   }
 
   const normalizeDomain = (domain) => {
@@ -225,8 +217,18 @@ export default function Search() {
       .filter((line) => line.length > 0)
 
   const handleSearch = async () => {
-    if (!domains.trim() || !articles.trim()) {
-      setError('Inserisci almeno un dominio e un articolo')
+    if (!selectedProjectId) {
+      setError('Seleziona un progetto')
+      return
+    }
+
+    if (!articles.trim()) {
+      setError('Inserisci almeno un articolo')
+      return
+    }
+
+    if (!domains.trim()) {
+      setError('Il progetto selezionato non ha domini salvati.')
       return
     }
 
@@ -378,34 +380,32 @@ export default function Search() {
         </header>
 
         <div className="form-section">
-          {adminChecked && isAdmin && (
-            <div className="input-group">
-              <label htmlFor="projectSelect">
-                <span className="label-icon">📁</span>
-                Progetto
-              </label>
-              <select
-                id="projectSelect"
-                value={selectedProjectId}
-                onChange={(e) => setSelectedProjectId(e.target.value)}
-                disabled={isSearching || loadingProjects}
-                style={{ width: '100%', padding: 12, borderRadius: 8 }}
-              >
-                {projects.length === 0 ? (
-                  <option value="">{loadingProjects ? 'Caricamento...' : 'Nessun progetto'}</option>
-                ) : (
-                  projects.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))
-                )}
-              </select>
-              <small>Domini caricati dal progetto selezionato.</small>
-            </div>
-          )}
+          <div className="input-group">
+            <label htmlFor="projectSelect">
+              <span className="label-icon">📁</span>
+              Progetto
+            </label>
+            <select
+              id="projectSelect"
+              value={selectedProjectId}
+              onChange={(e) => setSelectedProjectId(e.target.value)}
+              disabled={isSearching || loadingProjects}
+              style={{ width: '100%', padding: 12, borderRadius: 8 }}
+            >
+              {projects.length === 0 ? (
+                <option value="">{loadingProjects ? 'Caricamento...' : 'Nessun progetto'}</option>
+              ) : (
+                projects.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))
+              )}
+            </select>
+            <small>{loadingDomains ? 'Caricamento domini...' : 'I domini arrivano dal progetto selezionato.'}</small>
+          </div>
 
-          {/* Domini: nascosti ai non-TL; per TL sono caricati dal progetto (sola lettura) */}
+          {/* Domini visibili solo al TL/Owner */}
           {adminChecked && isAdmin && (
             <div className="input-group">
               <label htmlFor="domains">
@@ -416,11 +416,10 @@ export default function Search() {
                 id="domains"
                 value={domains}
                 onChange={(e) => setDomains(e.target.value)}
-                placeholder={'askanews.it\nquotidiano.net\ndailymotion.com\n...'}
                 rows={8}
                 disabled={true}
               />
-              <small>{loadingDomains ? 'Caricamento domini...' : 'Per modificarli vai in Dashboard → progetto.'}</small>
+              <small>Per modificarli vai in Dashboard → progetto.</small>
             </div>
           )}
 
@@ -442,7 +441,7 @@ export default function Search() {
           <button
             className="search-button"
             onClick={handleSearch}
-            disabled={isSearching || (adminChecked && isAdmin ? !domains.trim() : false) || !articles.trim()}
+            disabled={isSearching || !selectedProjectId || !articles.trim() || loadingDomains}
           >
             {isSearching ? '⏳ Ricerca in corso...' : '🚀 Avvia Ricerca'}
           </button>
