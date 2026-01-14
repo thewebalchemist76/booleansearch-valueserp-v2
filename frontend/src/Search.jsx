@@ -26,6 +26,7 @@ export default function Search() {
 
     const checkAdmin = async () => {
       setAdminChecked(false)
+
       const {
         data: { user },
         error: userErr,
@@ -39,14 +40,33 @@ export default function Search() {
         return
       }
 
-      const { data, error } = await supabase
+      // 1) check admin_users
+      const { data: adminData, error: adminErr } = await supabase
         .from('admin_users')
         .select('user_id')
         .eq('user_id', user.id)
         .maybeSingle()
 
       if (!mounted) return
-      setIsAdmin(!error && !!data)
+
+      if (!adminErr && adminData) {
+        setIsAdmin(true)
+        setAdminChecked(true)
+        return
+      }
+
+      // 2) check OWNER (project_members)
+      const { data: ownerData, error: ownerErr } = await supabase
+        .from('project_members')
+        .select('project_id')
+        .eq('user_id', user.id)
+        .eq('role', 'owner')
+        .limit(1)
+        .maybeSingle()
+
+      if (!mounted) return
+
+      setIsAdmin(!ownerErr && !!ownerData)
       setAdminChecked(true)
     }
 
@@ -56,6 +76,7 @@ export default function Search() {
       mounted = false
     }
   }, [])
+
 
   const logout = async () => {
     await supabase.auth.signOut()
