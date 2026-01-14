@@ -12,17 +12,14 @@ export default function Dashboard() {
   const [isAdmin, setIsAdmin] = useState(false)
   const [adminChecked, setAdminChecked] = useState(false)
 
+  const canCreate = useMemo(() => adminChecked && isAdmin, [adminChecked, isAdmin])
+
   const logout = async () => {
     await supabase.auth.signOut()
     navigate('/login', { replace: true })
   }
 
-  const canCreate = useMemo(() => isAdmin && adminChecked, [isAdmin, adminChecked])
-
   const loadProjects = async () => {
-    setLoading(true)
-    setError(null)
-
     const { data, error } = await supabase
       .from('projects')
       .select('id,name,created_at')
@@ -31,15 +28,15 @@ export default function Dashboard() {
     if (error) {
       setError(error.message)
       setProjects([])
-    } else {
-      setProjects(data || [])
+      return
     }
 
-    setLoading(false)
+    setProjects(data || [])
   }
 
   const checkAdmin = async () => {
     setAdminChecked(false)
+
     const {
       data: { user },
       error: userErr,
@@ -58,12 +55,12 @@ export default function Dashboard() {
       .maybeSingle()
 
     if (error) {
-      // se RLS/permessi bloccano la select, trattiamo come non-admin
       setIsAdmin(false)
-    } else {
-      setIsAdmin(!!data)
+      setAdminChecked(true)
+      return
     }
 
+    setIsAdmin(!!data)
     setAdminChecked(true)
   }
 
@@ -71,11 +68,18 @@ export default function Dashboard() {
     let mounted = true
 
     const init = async () => {
+      if (!mounted) return
+      setLoading(true)
+      setError(null)
+
       await checkAdmin()
       await loadProjects()
+
+      if (!mounted) return
+      setLoading(false)
     }
 
-    if (mounted) init()
+    init()
 
     return () => {
       mounted = false
@@ -85,6 +89,7 @@ export default function Dashboard() {
 
   const createProject = async (e) => {
     e.preventDefault()
+
     if (!canCreate) {
       setError('Non hai i permessi per creare progetti.')
       return
@@ -155,6 +160,25 @@ export default function Dashboard() {
     setSaving(false)
   }
 
+  // IMPORTANT: finché non abbiamo verificato admin, non renderizzare il contenuto
+  if (!adminChecked) {
+    return (
+      <div className="app">
+        <div className="container">
+          <div className="results-section">
+            <div className="results-header">
+              <h2>Dashboard</h2>
+              <button className="download-button" onClick={logout}>
+                Logout
+              </button>
+            </div>
+            <p>Caricamento...</p>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="app">
       <div className="container">
@@ -168,13 +192,13 @@ export default function Dashboard() {
 
           {error && <div className="error-message">⚠️ {error}</div>}
 
-          {adminChecked && !isAdmin && (
+          {!isAdmin && (
             <div className="progress-section" style={{ marginBottom: 20 }}>
               <p className="progress-text">Accesso limitato: non puoi creare progetti.</p>
             </div>
           )}
 
-          {canCreate && (
+          {isAdmin && (
             <div className="form-section" style={{ marginBottom: 20 }}>
               <div className="input-group" style={{ marginBottom: 12 }}>
                 <label htmlFor="projectName">Nuovo progetto</label>
@@ -182,7 +206,6 @@ export default function Dashboard() {
                   id="projectName"
                   value={newProjectName}
                   onChange={(e) => setNewProjectName(e.target.value)}
-                  placeholder="Es. Cliente ABC"
                   disabled={saving}
                   style={{
                     width: '100%',
