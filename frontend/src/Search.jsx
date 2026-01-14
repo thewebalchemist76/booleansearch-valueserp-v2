@@ -2,9 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import './App.css'
-import { useNavigate, Link } from 'react-router-dom'
-
-
+import { useNavigate } from 'react-router-dom'
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -76,7 +74,6 @@ export default function Search() {
       mounted = false
     }
   }, [])
-
 
   const logout = async () => {
     await supabase.auth.signOut()
@@ -244,7 +241,6 @@ export default function Search() {
             </div>
 
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-
               {adminChecked && isAdmin && (
                 <a href="/dashboard" className="download-button" style={{ textDecoration: 'none' }}>
                   Dashboard
@@ -259,21 +255,23 @@ export default function Search() {
         </header>
 
         <div className="form-section">
-          <div className="input-group">
-            <label htmlFor="domains">
-              <span className="label-icon">🌐</span>
-              Domini (uno per riga)
-            </label>
-            <textarea
-              id="domains"
-              value={domains}
-              onChange={(e) => setDomains(e.target.value)}
-              placeholder={'askanews.it\nquotidiano.net\ndailymotion.com\n...'}
-              rows={8}
-              disabled={isSearching}
-            />
-            <small>I domini verranno puliti automaticamente.</small>
-          </div>
+          {adminChecked && isAdmin && (
+            <div className="input-group">
+              <label htmlFor="domains">
+                <span className="label-icon">🌐</span>
+                Domini (uno per riga)
+              </label>
+              <textarea
+                id="domains"
+                value={domains}
+                onChange={(e) => setDomains(e.target.value)}
+                placeholder={'askanews.it\nquotidiano.net\ndailymotion.com\n...'}
+                rows={8}
+                disabled={isSearching}
+              />
+              <small>I domini verranno puliti automaticamente.</small>
+            </div>
+          )}
 
           <div className="input-group">
             <label htmlFor="articles">
@@ -293,7 +291,7 @@ export default function Search() {
           <button
             className="search-button"
             onClick={handleSearch}
-            disabled={isSearching || !domains.trim() || !articles.trim()}
+            disabled={isSearching || (adminChecked && isAdmin ? !domains.trim() : false) || !articles.trim()}
           >
             {isSearching ? '⏳ Ricerca in corso...' : '🚀 Avvia Ricerca'}
           </button>
