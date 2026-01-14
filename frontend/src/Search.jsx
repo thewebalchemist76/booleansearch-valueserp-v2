@@ -1,5 +1,5 @@
 // frontend/src/Search.jsx
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import './App.css'
@@ -16,9 +16,52 @@ export default function Search() {
   const [results, setResults] = useState([])
   const [error, setError] = useState(null)
 
+  const [adminChecked, setAdminChecked] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
+
+  useEffect(() => {
+    let mounted = true
+
+    const checkAdmin = async () => {
+      setAdminChecked(false)
+      const {
+        data: { user },
+        error: userErr,
+      } = await supabase.auth.getUser()
+
+      if (!mounted) return
+
+      if (userErr || !user) {
+        setIsAdmin(false)
+        setAdminChecked(true)
+        return
+      }
+
+      const { data, error } = await supabase
+        .from('admin_users')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (!mounted) return
+      setIsAdmin(!error && !!data)
+      setAdminChecked(true)
+    }
+
+    checkAdmin()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
   const logout = async () => {
     await supabase.auth.signOut()
     navigate('/login', { replace: true })
+  }
+
+  const goDashboard = () => {
+    navigate('/dashboard', { replace: true })
   }
 
   const normalizeDomain = (domain) => {
@@ -177,9 +220,17 @@ export default function Search() {
               <p className="info-text">⚡ Ogni ricerca richiede ~1-2 secondi • Powered by ValueSERP</p>
             </div>
 
-            <button className="download-button" onClick={logout} disabled={isSearching}>
-              Logout
-            </button>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              {adminChecked && isAdmin && (
+                <button className="download-button" onClick={goDashboard} disabled={isSearching}>
+                  Dashboard
+                </button>
+              )}
+
+              <button className="download-button" onClick={logout} disabled={isSearching}>
+                Logout
+              </button>
+            </div>
           </div>
         </header>
 
