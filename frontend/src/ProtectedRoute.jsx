@@ -1,27 +1,31 @@
-// frontend/src/ProtectedRoute.jsx
 import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 
 export default function ProtectedRoute({ session, children, adminOnly = false }) {
-  const [checking, setChecking] = useState(false)
-  const [isAdmin, setIsAdmin] = useState(false)
+  // null = non ancora verificato, true/false = verificato
+  const [isAdmin, setIsAdmin] = useState(adminOnly ? null : false)
 
   useEffect(() => {
     let mounted = true
 
     const check = async () => {
-      if (!adminOnly) return
+      if (!adminOnly) {
+        if (!mounted) return
+        setIsAdmin(false)
+        return
+      }
+
+      // importantissimo: prima render "in verifica"
+      if (!mounted) return
+      setIsAdmin(null)
 
       const userId = session?.user?.id
       if (!userId) {
         if (!mounted) return
         setIsAdmin(false)
-        setChecking(false)
         return
       }
-
-      setChecking(true)
 
       const { data, error } = await supabase
         .from('admin_users')
@@ -31,7 +35,6 @@ export default function ProtectedRoute({ session, children, adminOnly = false })
 
       if (!mounted) return
       setIsAdmin(!error && !!data)
-      setChecking(false)
     }
 
     check()
@@ -44,7 +47,7 @@ export default function ProtectedRoute({ session, children, adminOnly = false })
   if (!session) return <Navigate to="/login" replace />
 
   if (adminOnly) {
-    if (checking) {
+    if (isAdmin === null) {
       return (
         <div style={{ padding: 40, textAlign: 'center' }}>
           <p>Caricamento dashboard…</p>
