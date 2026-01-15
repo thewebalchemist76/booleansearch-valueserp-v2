@@ -1,4 +1,3 @@
-// supabase/functions/add-member-by-email/index.ts
 import { serve } from "https://deno.land/std@0.224.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -14,7 +13,6 @@ serve(async (req) => {
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
     const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    // Usa l'apikey passata nella request (la anon public key HS256)
     const reqApiKey =
       req.headers.get("apikey") ||
       req.headers.get("x-api-key") ||
@@ -23,7 +21,6 @@ serve(async (req) => {
 
     const authHeader = req.headers.get("Authorization") || "";
 
-    // client "as user" (per capire chi sta chiamando)
     const supabaseUser = createClient(SUPABASE_URL, reqApiKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -32,10 +29,15 @@ serve(async (req) => {
     const caller = userData?.user;
 
     if (userErr || !caller) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({
+          error: "Unauthorized",
+          detail: userErr?.message || null,
+          has_apikey: !!reqApiKey,
+          has_auth: !!authHeader,
+        }),
+        { status: 401, headers: { "Content-Type": "application/json" } }
+      );
     }
 
     const body = await req.json();
@@ -50,10 +52,8 @@ serve(async (req) => {
       });
     }
 
-    // service role client (lookup user + upsert)
     const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY);
 
-    // permessi: admin_users OR owner su project_members
     const { data: adminRow } = await supabaseAdmin
       .from("admin_users")
       .select("user_id")
@@ -81,7 +81,6 @@ serve(async (req) => {
       });
     }
 
-    // trova utente per email
     const { data: found, error: findErr } = await supabaseAdmin.auth.admin.getUserByEmail(email);
     if (findErr || !found?.user) {
       return new Response(JSON.stringify({ error: "User not found for this email" }), {
@@ -92,7 +91,6 @@ serve(async (req) => {
 
     const targetUid = found.user.id;
 
-    // upsert membership
     const { error: upsertErr } = await supabaseAdmin
       .from("project_members")
       .upsert([{ project_id, user_id: targetUid, role }], { onConflict: "project_id,user_id" });
