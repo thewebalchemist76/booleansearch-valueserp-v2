@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from './supabaseClient'
 import './App.css'
 import { useNavigate } from 'react-router-dom'
+import * as XLSX from 'xlsx'
 
 const API_URL = import.meta.env.VITE_API_URL
 
@@ -350,6 +351,27 @@ export default function Search() {
     link.click()
   }
 
+  const downloadXLSX = () => {
+    if (results.length === 0) return
+
+    const data = results.map((r) => ({
+      Dominio: r.domain,
+      Articolo: r.article,
+      'Query di Ricerca': r.searchQuery,
+      'Link Articolo': r.url,
+      Titolo: r.title,
+      Descrizione: r.description || '',
+      Errore: r.error || '',
+    }))
+
+    const ws = XLSX.utils.json_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Risultati')
+
+    const today = new Date().toISOString().split('T')[0]
+    XLSX.writeFile(wb, `ricerche_google_valueserp_${today}.xlsx`)
+  }
+
   const successCount = results.filter((r) => r.url && !r.error).length
   const errorCount = results.filter((r) => r.error).length
   const notFoundCount = results.filter((r) => !r.url && !r.error).length
@@ -474,8 +496,8 @@ export default function Search() {
                   </span>
                 )}
               </h2>
-              <button className="download-button" onClick={downloadCSV} disabled={isSearching}>
-                📥 Scarica CSV
+              <button className="download-button" onClick={downloadXLSX} disabled={isSearching}>
+                📥 Scarica XLSX
               </button>
             </div>
 
