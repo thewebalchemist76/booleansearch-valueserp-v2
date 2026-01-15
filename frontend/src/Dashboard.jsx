@@ -70,19 +70,29 @@ export default function Dashboard() {
       return
     }
 
-    const { data, error } = await supabase
+    // 1) admin_users
+    const { data: adminData, error: adminErr } = await supabase
       .from('admin_users')
       .select('user_id')
       .eq('user_id', user.id)
       .maybeSingle()
 
-    if (error) {
-      setIsAdmin(false)
+    if (!adminErr && adminData) {
+      setIsAdmin(true)
       setAdminChecked(true)
       return
     }
 
-    setIsAdmin(!!data)
+    // 2) owner su project_members (almeno 1 progetto)
+    const { data: ownerData, error: ownerErr } = await supabase
+      .from('project_members')
+      .select('project_id')
+      .eq('user_id', user.id)
+      .eq('role', 'owner')
+      .limit(1)
+      .maybeSingle()
+
+    setIsAdmin(!ownerErr && !!ownerData)
     setAdminChecked(true)
   }
 
@@ -321,9 +331,9 @@ export default function Dashboard() {
       return
     }
 
-    const uid = newMemberUserId.trim()
-    if (!uid) {
-      setError('Inserisci un User ID.')
+    const email = newMemberUserId.trim()
+    if (!email) {
+      setError('Inserisci una email.')
       return
     }
 
@@ -332,13 +342,19 @@ export default function Dashboard() {
     setSaving(true)
     setError(null)
 
-    const { error } = await supabase
-      .from('project_members')
-      .upsert([{ project_id: selectedProjectId, user_id: uid, role }], { onConflict: 'project_id,user_id' })
+    const { data, error } = await supabase.functions.invoke('add-member-by-email', {
+      body: { project_id: selectedProjectId, email, role },
+    })
 
     if (error) {
       setSaving(false)
-      setError(error.message)
+      setError(error.message || 'Errore durante aggiunta membro.')
+      return
+    }
+
+    if (data?.error) {
+      setSaving(false)
+      setError(data.error)
       return
     }
 
@@ -481,11 +497,7 @@ export default function Dashboard() {
               <small>Il progetto sarà visibile solo ai membri autorizzati.</small>
             </div>
 
-            <button
-              className="search-button"
-              onClick={createProject}
-              disabled={saving || !newProjectName.trim()}
-            >
+            <button className="search-button" onClick={createProject} disabled={saving || !newProjectName.trim()}>
               {saving ? '⏳ Creazione...' : '➕ Crea progetto'}
             </button>
           </div>
@@ -531,7 +543,7 @@ export default function Dashboard() {
               </div>
 
               <div className="input-group" style={{ marginBottom: 10 }}>
-                <label htmlFor="memberUserId">Aggiungi membro (User ID)</label>
+                <label htmlFor="memberUserId">Aggiungi membro (Email)</label>
                 <input
                   id="memberUserId"
                   value={newMemberUserId}
@@ -544,9 +556,8 @@ export default function Dashboard() {
                     borderRadius: 8,
                     fontSize: '0.95rem',
                   }}
-                  placeholder="es: 42eba519-3d0f-4cbe-918a-..."
                 />
-                <small>Per ora usa lo User ID (uuid) dell’utente non-TL.</small>
+                <small>Inserisci l’email dell’utente (deve essere già registrato).</small>
               </div>
 
               <div className="input-group" style={{ marginBottom: 10 }}>
@@ -615,12 +626,7 @@ export default function Dashboard() {
             <div className="form-section" style={{ marginTop: 10 }}>
               <div className="results-header" style={{ marginBottom: 10 }}>
                 <h3 style={{ margin: 0, fontSize: '1.05rem' }}>Domini del progetto</h3>
-                <button
-                  className="download-button"
-                  onClick={deleteProject}
-                  disabled={saving}
-                  title="Elimina progetto"
-                >
+                <button className="download-button" onClick={deleteProject} disabled={saving} title="Elimina progetto">
                   🗑️ Elimina
                 </button>
               </div>
@@ -642,9 +648,7 @@ export default function Dashboard() {
                     resize: 'vertical',
                   }}
                 />
-                <small>
-                  Verranno ripuliti automaticamente: http/https, www, path, query, porte. Duplicati rimossi.
-                </small>
+                <small>Verranno ripuliti automaticamente: http/https, www, path, query, porte. Duplicati rimossi.</small>
               </div>
 
               <button className="search-button" onClick={saveDomains} disabled={saving || domainsLoading}>
