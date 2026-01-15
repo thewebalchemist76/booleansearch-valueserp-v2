@@ -1,21 +1,35 @@
 const express = require('express');
 const cors = require('cors');
 const fetch = require('node-fetch');
+const { getJson } = require('serpapi');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 const VALUESERP_KEY = process.env.VALUESERP_KEY || '';
+const SERPAPI_KEY = process.env.SERPAPI_KEY || '';
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
+function isMsnDomain(domain) {
+  const d = (domain || '').toLowerCase().trim().replace(/^www\./, '');
+  return d === 'msn.com' || d.endsWith('.msn.com');
+}
+
+function serpApiGetJson(params) {
+  return new Promise((resolve) => {
+    getJson(params, (json) => resolve(json));
+  });
+}
+
 // Health check
 app.get('/', (req, res) => {
-  res.json({ 
-    status: 'ok', 
+  res.json({
+    status: 'ok',
     message: 'Boolean Search API with ValueSERP on Render',
-    hasApiKey: !!VALUESERP_KEY
+    hasApiKey: !!VALUESERP_KEY,
+    hasSerpApiKey: !!SERPAPI_KEY
   });
 });
 
@@ -27,14 +41,63 @@ app.post('/api/search', async (req, res) => {
     return res.status(400).json({ error: 'Dominio e query sono richiesti' });
   }
 
-  if (!VALUESERP_KEY) {
-    return res.status(500).json({ error: 'ValueSERP key non configurata' });
-  }
-
   const cleanDomain = domain.replace(/\.\*$/, '').replace(/\*$/, '').replace(/\.$/, '').trim();
   const searchQuery = `site:${cleanDomain} "${query}"`;
 
   try {
+    // MSN => Bing via SerpApi, everything else => Google via ValueSERP (unchanged)
+    if (isMsnDomain(cleanDomain)) {
+      if (!SERPAPI_KEY) {
+        return res.status(500).json({ error: 'SerpApi key non configurata (necessaria per msn.com)' });
+      }
+
+      console.log(`🔍 Searching (Bing/SerpApi): ${searchQuery}`);
+
+      const data = await serpApiGetJson({
+        engine: 'bing',
+        q: searchQuery,
+        cc: 'IT',
+        api_key: SERPAPI_KEY
+      });
+
+      if (data && data.error) {
+        console.error(`❌ SerpApi error: ${data.error}`);
+        return res.status(500).json({
+          url: '',
+          title: '',
+          description: '',
+          error: `Errore SerpApi: ${data.error}`
+        });
+      }
+
+      const results = parseValueSERPResults(data, query);
+
+      if (results.length > 0) {
+        const best = results[0];
+        console.log(`✅ Found: ${best.url}`);
+
+        return res.json({
+          url: best.url,
+          title: best.title,
+          description: best.description,
+          error: null
+        });
+      }
+
+      console.log('⚠️ No results found');
+      return res.json({
+        url: '',
+        title: '',
+        description: '',
+        error: 'Nessun risultato trovato'
+      });
+    }
+
+    // --- Default: Google via ValueSERP (original behavior, unchanged) ---
+    if (!VALUESERP_KEY) {
+      return res.status(500).json({ error: 'ValueSERP key non configurata' });
+    }
+
     console.log(`🔍 Searching: ${searchQuery}`);
 
     // ValueSERP Google Search URL
@@ -44,7 +107,7 @@ app.post('/api/search', async (req, res) => {
 
     // Fetch from ValueSERP
     const response = await fetch(valueSerpUrl);
-    
+
     if (!response.ok) {
       console.error(`❌ ValueSERP error: ${response.status}`);
       return res.status(500).json({
@@ -75,7 +138,7 @@ app.post('/api/search', async (req, res) => {
     if (results.length > 0) {
       const best = results[0];
       console.log(`✅ Found: ${best.url}`);
-      
+
       return res.json({
         url: best.url,
         title: best.title,
@@ -108,21 +171,20 @@ function parseValueSERPResults(data, originalQuery) {
 
   // Check organic_results first
   let allResults = [];
-  
+
   if (data.organic_results && data.organic_results.length > 0) {
     allResults = [...data.organic_results];
     console.log(`📊 Found ${data.organic_results.length} organic results`);
   }
-  
+
   // Check video_results
   if (data.video_results && data.video_results.length > 0) {
     allResults = [...allResults, ...data.video_results];
     console.log(`🎥 Found ${data.video_results.length} video results`);
   }
-  
+
   // CHECK INLINE_VIDEOS (for sites like Dailymotion, YouTube embedded)
   if (data.inline_videos && data.inline_videos.length > 0) {
-    // Convert inline_videos to same format as organic_results
     const inlineVideos = data.inline_videos.map(video => ({
       link: video.link,
       title: video.title,
@@ -131,7 +193,7 @@ function parseValueSERPResults(data, originalQuery) {
     allResults = [...allResults, ...inlineVideos];
     console.log(`📹 Found ${data.inline_videos.length} inline videos`);
   }
-  
+
   // Check knowledge_graph results
   if (data.knowledge_graph && data.knowledge_graph.source) {
     allResults.push({
@@ -149,7 +211,6 @@ function parseValueSERPResults(data, originalQuery) {
 
   console.log(`📊 Total results found: ${allResults.length}`);
 
-  // Extract results from ValueSERP
   for (const item of allResults) {
     if (item.link && item.title) {
       results.push({
@@ -161,7 +222,6 @@ function parseValueSERPResults(data, originalQuery) {
     }
   }
 
-  // Sort by similarity
   results.sort((a, b) => b.similarity - a.similarity);
 
   console.log(`✅ Parsed ${results.length} valid results`);
@@ -172,14 +232,14 @@ function parseValueSERPResults(data, originalQuery) {
 function calculateSimilarity(str1, str2) {
   const s1 = str1.toLowerCase().trim();
   const s2 = str2.toLowerCase().trim();
-  
+
   if (s1 === s2) return 1.0;
   if (s1.includes(s2) || s2.includes(s1)) return 0.8;
-  
+
   const words1 = s1.split(/\s+/);
   const words2 = s2.split(/\s+/);
   let matches = 0;
-  
+
   for (const word1 of words1) {
     for (const word2 of words2) {
       if (word1.length > 3 && word2.length > 3 && word1 === word2) {
@@ -187,7 +247,7 @@ function calculateSimilarity(str1, str2) {
       }
     }
   }
-  
+
   return matches / Math.max(words1.length, words2.length);
 }
 
@@ -195,4 +255,5 @@ function calculateSimilarity(str1, str2) {
 app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🔑 ValueSERP key: ${VALUESERP_KEY ? 'configured ✅' : 'MISSING ❌'}`);
+  console.log(`🔑 SerpApi key: ${SERPAPI_KEY ? 'configured ✅' : 'MISSING ❌'}`);
 });
