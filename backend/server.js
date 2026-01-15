@@ -10,21 +10,6 @@ const VALUESERP_KEY = process.env.VALUESERP_KEY || '';
 app.use(cors());
 app.use(express.json());
 
-// Pick search engine based on domain
-function pickEngineForDomain(domain) {
-  const d = (domain || '')
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/^www\./, '')
-    .trim();
-
-  if (d === 'msn.com' || d.endsWith('.msn.com')) {
-    return 'bing';
-  }
-
-  return 'google';
-}
-
 // Health check
 app.get('/', (req, res) => {
   res.json({ 
@@ -47,34 +32,13 @@ app.post('/api/search', async (req, res) => {
   }
 
   const cleanDomain = domain.replace(/\.\*$/, '').replace(/\*$/, '').replace(/\.$/, '').trim();
-  const engine = pickEngineForDomain(cleanDomain);
   const searchQuery = `site:${cleanDomain} "${query}"`;
 
   try {
-    console.log(`🔍 Engine: ${engine} | Searching: ${searchQuery}`);
+    console.log(`🔍 Searching: ${searchQuery}`);
 
-    let valueSerpUrl;
-
-    if (engine === 'bing') {
-      // ValueSERP Bing Search URL
-      valueSerpUrl =
-        `https://api.valueserp.com/search` +
-        `?api_key=${VALUESERP_KEY}` +
-        `&engine=bing` +
-        `&q=${encodeURIComponent(searchQuery)}` +
-        `&location=Italy` +
-        `&num=10`;
-    } else {
-      // ValueSERP Google Search URL (default)
-      valueSerpUrl =
-        `https://api.valueserp.com/search` +
-        `?api_key=${VALUESERP_KEY}` +
-        `&q=${encodeURIComponent(searchQuery)}` +
-        `&location=Italy` +
-        `&gl=it` +
-        `&hl=it` +
-        `&num=10`;
-    }
+    // ValueSERP Google Search URL
+    const valueSerpUrl = `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(searchQuery)}&location=Italy&gl=it&hl=it&num=10`;
 
     console.log(`🌐 Fetching from ValueSERP...`);
 
