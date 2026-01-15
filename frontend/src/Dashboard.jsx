@@ -331,7 +331,7 @@ export default function Dashboard() {
       return
     }
 
-    const email = newMemberUserId.trim()
+    const email = newMemberUserId.trim().toLowerCase()
     if (!email) {
       setError('Inserisci una email.')
       return
@@ -347,14 +347,26 @@ export default function Dashboard() {
     })
 
     if (error) {
+      // supabase-js spesso mette il body dell’errore qui
+      let msg = error.message || 'Errore durante aggiunta membro.'
+      try {
+        const body = error.context?.body
+        if (typeof body === 'string') {
+          const parsed = JSON.parse(body)
+          if (parsed?.error) msg = parsed.error
+        } else if (body?.error) {
+          msg = body.error
+        }
+      } catch (_) {}
+
       setSaving(false)
-      setError(error.message || 'Errore durante aggiunta membro.')
+      setError(msg)
       return
     }
 
-    if (data?.error) {
+    if (!data?.ok) {
       setSaving(false)
-      setError(data.error)
+      setError(data?.error || 'Errore: risposta non valida dalla funzione.')
       return
     }
 
