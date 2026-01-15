@@ -81,15 +81,21 @@ serve(async (req) => {
       });
     }
 
-    const { data: found, error: findErr } = await supabaseAdmin.auth.admin.getUserByEmail(email);
-    if (findErr || !found?.user) {
+    const { data: prof, error: findErr } = await supabaseAdmin
+      .from("profiles")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (findErr || !prof?.id) {
       return new Response(JSON.stringify({ error: "User not found for this email" }), {
         status: 404,
         headers: { "Content-Type": "application/json" },
       });
     }
 
-    const targetUid = found.user.id;
+    const targetUid = prof.id;
+
 
     const { error: upsertErr } = await supabaseAdmin
       .from("project_members")
