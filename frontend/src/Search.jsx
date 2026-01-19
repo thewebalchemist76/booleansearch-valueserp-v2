@@ -27,6 +27,41 @@ export default function Search() {
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [loadingDomains, setLoadingDomains] = useState(false)
 
+  const TISCALI_REGIONS = [
+    'valle-aosta',
+    'piemonte',
+    'lombardia',
+    'trentino-alto-adige',
+    'friuli-venezia-giulia',
+    'emilia-romagna',
+    'veneto',
+    'liguria',
+    'toscana',
+    'umbria',
+    'lazio',
+    'marche',
+    'abruzzo',
+    'molise',
+    'puglia',
+    'campania',
+    'basilicata',
+    'calabria',
+    'sicilia',
+    'sardegna',
+  ]
+
+  const normalizeUrlJoin = (base, suffix) => {
+    const b = String(base || '').replace(/\/+$/, '')
+    const s = String(suffix || '').replace(/^\/+/, '')
+    return `${b}/${s}`
+  }
+
+  const extractTiscaliArticoliSuffix = (url) => {
+    if (!url) return null
+    const m = String(url).match(/\/articoli\/.+$/)
+    return m ? m[0].replace(/^\/+/, '') : null
+  }
+
   useEffect(() => {
     let mounted = true
 
@@ -354,17 +389,40 @@ export default function Search() {
   const downloadXLSX = () => {
     if (results.length === 0) return
 
-    const data = results.map((r) => ({
-      Dominio: r.domain,
-      Articolo: r.article,
-      'Query di Ricerca': r.searchQuery,
-      'Link Articolo': r.url,
-      Titolo: r.title,
-      Descrizione: r.description || '',
-      Errore: r.error || '',
-    }))
+    const rows = []
 
-    const ws = XLSX.utils.json_to_sheet(data)
+    for (const r of results) {
+      rows.push({
+        Dominio: r.domain,
+        Articolo: r.article,
+        'Query di Ricerca': r.searchQuery,
+        'Link Articolo': r.url,
+        Titolo: r.title,
+        Descrizione: r.description || '',
+        Errore: r.error || '',
+      })
+
+      const domainNorm = String(r.domain || '').toLowerCase().trim().replace(/^www\./, '')
+      if (domainNorm === 'notizie.tiscali.it' && r.url && !r.error) {
+        const suffix = extractTiscaliArticoliSuffix(r.url)
+        if (suffix) {
+          for (const region of TISCALI_REGIONS) {
+            const targetBase = `https://notizie.tiscali.it/regioni/${region}`
+            rows.push({
+              Dominio: `notizie.tiscali.it/regioni/${region}`,
+              Articolo: r.article,
+              'Query di Ricerca': r.searchQuery,
+              'Link Articolo': normalizeUrlJoin(targetBase, suffix),
+              Titolo: r.title,
+              Descrizione: r.description || '',
+              Errore: '',
+            })
+          }
+        }
+      }
+    }
+
+    const ws = XLSX.utils.json_to_sheet(rows)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Risultati')
 
@@ -434,13 +492,7 @@ export default function Search() {
                 <span className="label-icon">🌐</span>
                 Domini (dal progetto)
               </label>
-              <textarea
-                id="domains"
-                value={domains}
-                onChange={(e) => setDomains(e.target.value)}
-                rows={8}
-                disabled={true}
-              />
+              <textarea id="domains" value={domains} onChange={(e) => setDomains(e.target.value)} rows={8} disabled={true} />
               <small>Per modificarli vai in Dashboard → progetto.</small>
             </div>
           )}
