@@ -353,7 +353,7 @@ export default function Search() {
   const downloadCSV = () => {
     if (results.length === 0) return
 
-    const headers = ['Dominio', 'Articolo', 'Query di Ricerca', 'Link Articolo', 'Titolo', 'Descrizione', 'Errore']
+    const headers = ['Dominio', 'Articolo', 'Query di Ricerca', 'Link Articolo', 'Titolo', 'Errore']
     const rows = results.map((r) => [
       r.domain,
       r.article,
@@ -398,7 +398,6 @@ export default function Search() {
         'Query di Ricerca': r.searchQuery,
         'Link Articolo': r.url,
         Titolo: r.title,
-        Descrizione: r.description || '',
         Errore: r.error || '',
       })
 
@@ -414,7 +413,6 @@ export default function Search() {
               'Query di Ricerca': r.searchQuery,
               'Link Articolo': normalizeUrlJoin(targetBase, suffix),
               Titolo: r.title,
-              Descrizione: r.description || '',
               Errore: '',
             })
           }
