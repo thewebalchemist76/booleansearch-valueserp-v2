@@ -12,11 +12,31 @@ function normalizeDomains(input) {
   const cleaned = lines
     .map((raw) => raw.toLowerCase())
     .map((raw) => raw.replace(/^[\s"'`]+|[\s"'`]+$/g, ''))
+    // rimuove protocollo
     .map((raw) => raw.replace(/^https?:\/\//, ''))
-    .map((raw) => raw.replace(/^www\./, ''))
-    .map((raw) => raw.split('/')[0])
-    .map((raw) => raw.split('?')[0])
+    // rimuove query/hash
     .map((raw) => raw.split('#')[0])
+    .map((raw) => raw.split('?')[0])
+    // rimuove slash finali
+    .map((raw) => raw.replace(/\/+$/g, ''))
+    // separa host e path
+    .map((raw) => {
+      const firstSlash = raw.indexOf('/')
+      const host = (firstSlash === -1 ? raw : raw.slice(0, firstSlash)).replace(/^www\./, '')
+      const path = firstSlash === -1 ? '' : raw.slice(firstSlash)
+
+      const hostNoWww = host.toLowerCase()
+
+      // SOLO per questi due domini manteniamo il path
+      if (hostNoWww === 'youtube.com' || hostNoWww === 'dailymotion.com') {
+        const cleanPath = path.replace(/\/+$/g, '')
+        return `${hostNoWww}${cleanPath}`
+      }
+
+      // tutti gli altri: solo host
+      return hostNoWww
+    })
+    // rimuove porte (sia su host che su host/path quando path è vuoto)
     .map((raw) => raw.replace(/:\d+$/, ''))
     .filter((d) => d && d.includes('.'))
     .map((d) => d.replace(/\.$/, ''))
@@ -675,7 +695,10 @@ export default function Dashboard() {
                     resize: 'vertical',
                   }}
                 />
-                <small>Verranno ripuliti automaticamente: http/https, www, path, query, porte. Duplicati rimossi.</small>
+                <small>
+                  Verranno ripuliti automaticamente: http/https, www, path (tranne youtube/dailymotion), query, porte.
+                  Duplicati rimossi.
+                </small>
               </div>
 
               <button className="search-button" onClick={saveDomains} disabled={saving || domainsLoading}>
