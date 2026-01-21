@@ -237,13 +237,22 @@ export default function Search() {
 
   const normalizeDomain = (domain) => {
     if (!domain) return ''
-    let cleaned = domain
-      .trim()
-      .replace(/^https?:\/\//i, '')
-      .replace(/^www\./i, '')
-      .replace(/\/$/, '')
-      .split('/')[0]
-    return cleaned
+    let raw = String(domain).trim()
+
+    raw = raw.replace(/^https?:\/\//i, '').replace(/^www\./i, '')
+    raw = raw.split('#')[0].split('?')[0]
+    raw = raw.replace(/\/+$/g, '')
+
+    const firstSlash = raw.indexOf('/')
+    const host = (firstSlash === -1 ? raw : raw.slice(0, firstSlash)).toLowerCase()
+    const path = firstSlash === -1 ? '' : raw.slice(firstSlash)
+
+    // keep path only for youtube.com and dailymotion.com
+    if (host === 'youtube.com' || host === 'dailymotion.com') {
+      return `${host}${path.replace(/\/+$/g, '')}`
+    }
+
+    return host
   }
 
   const parseInput = (input) =>
