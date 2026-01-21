@@ -23,6 +23,121 @@ function serpApiGetJson(params) {
   });
 }
 
+// --- WP internal-search domains (not reliably indexed on Google/Bing) ---
+const WP_INTERNAL_SEARCH_DOMAINS = new Set([
+  'forumitalia.info',
+  'investimentinews.it',
+  'primopiano24.it',
+  'accadeora.it',
+  'ondazzurra.com',
+  'venezia24.com',
+  'cronacheditrentoetrieste.it',
+  'corrierediancona.it',
+  'notiziarioflegreo.it',
+  'cittadi.it',
+  'cronachedelmezzogiorno.it',
+  'cronachedellacalabria.it',
+  'lacittadiroma.it',
+  'corrieredellasardegna.it',
+]);
+
+function normalizeDomainForChecks(domain) {
+  return String(domain || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//i, '')
+    .replace(/^www\./i, '')
+    .replace(/\/+$/g, '')
+    .replace(/\.\*$/g, '')
+    .replace(/\*$/g, '')
+    .replace(/\.$/g, '');
+}
+
+function isWpInternalDomain(domain) {
+  const d = normalizeDomainForChecks(domain);
+  return WP_INTERNAL_SEARCH_DOMAINS.has(d);
+}
+
+function slugify(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+}
+
+async function fetchWithTimeout(url, opts = {}, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(url, { ...opts, signal: controller.signal, redirect: 'follow' });
+    return res;
+  } finally {
+    clearTimeout(id);
+  }
+}
+
+function extractHtmlTitle(html) {
+  if (!html) return '';
+  const m = String(html).match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (!m) return '';
+  return String(m[1] || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 200);
+}
+
+async function tryWpDirectUrl(domain, query) {
+  const d = normalizeDomainForChecks(domain);
+  const slug = slugify(query);
+  if (!d || !slug) return null;
+
+  // prova i due pattern visti: /video/slug/ e /slug/
+  const candidates = [
+    `https://${d}/video/${slug}/`,
+    `https://${d}/${slug}/`,
+  ];
+
+  for (const url of candidates) {
+    try {
+      const res = await fetchWithTimeout(url, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0' } }, 9000);
+
+      if (!res || !res.ok) continue;
+
+      const ct = (res.headers.get('content-type') || '').toLowerCase();
+      // se non è html, comunque accettiamo (alcuni siti servono in modo strano)
+      const body = await res.text();
+      const title = extractHtmlTitle(body);
+
+      // se è una pagina WP "no results", spesso contiene "Nothing Found" / "Nessun risultato"
+      const bodyLower = body.toLowerCase();
+      if (
+        bodyLower.includes('nessun risultato') ||
+        bodyLower.includes('nothing found') ||
+        bodyLower.includes('no results found')
+      ) {
+        continue;
+      }
+
+      const finalUrl = res.url || url;
+
+      return {
+        url: finalUrl,
+        title: title || '',
+        description: '',
+      };
+    } catch (_) {
+      // prova prossimo candidato
+    }
+  }
+
+  return null;
+}
+
 // Health check
 app.get('/', (req, res) => {
   res.json({
@@ -41,10 +156,34 @@ app.post('/api/search', async (req, res) => {
     return res.status(400).json({ error: 'Dominio e query sono richiesti' });
   }
 
-  const cleanDomain = domain.replace(/\.\*$/, '').replace(/\*$/, '').replace(/\.$/, '').trim();
+  const cleanDomain = normalizeDomainForChecks(domain);
   const searchQuery = `site:${cleanDomain} "${query}"`;
 
   try {
+    // --- WP INTERNAL FALLBACK (bypass Google/Bing) ---
+    if (isWpInternalDomain(cleanDomain)) {
+      console.log(`🔎 WP direct check: ${cleanDomain} | query="${query}"`);
+      const found = await tryWpDirectUrl(cleanDomain, query);
+
+      if (found && found.url) {
+        console.log(`✅ Found (WP direct): ${found.url}`);
+        return res.json({
+          url: found.url,
+          title: found.title || '',
+          description: found.description || '',
+          error: null
+        });
+      }
+
+      console.log('⚠️ No results found (WP direct)');
+      return res.json({
+        url: '',
+        title: '',
+        description: '',
+        error: 'Nessun risultato trovato'
+      });
+    }
+
     // MSN => Bing via SerpApi, everything else => Google via ValueSERP (unchanged)
     if (isMsnDomain(cleanDomain)) {
       if (!SERPAPI_KEY) {
