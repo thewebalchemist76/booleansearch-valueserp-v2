@@ -478,15 +478,18 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="app">
-      <div className="container">
-        <div className="results-section">
-          <div className="results-header">
-            <h2>Dashboard</h2>
-            <button className="download-button" onClick={logout}>
-              Logout
-            </button>
-          </div>
+    <div className="results-header">
+      <h2>Dashboard</h2>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <button className="download-button" onClick={() => navigate('/search', { replace: true })}>
+          Ricerca
+        </button>
+        <button className="download-button" onClick={logout}>
+          Logout
+        </button>
+      </div>
+    </div>
+
 
           {error && <div className="error-message">⚠️ {error}</div>}
 
