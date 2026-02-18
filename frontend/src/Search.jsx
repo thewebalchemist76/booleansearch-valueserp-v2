@@ -405,7 +405,10 @@ export default function Search() {
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
-    link.download = `ricerche_google_valueserp_${new Date().toISOString().split('T')[0]}.csv`
+    const now = new Date()
+    const date = now.toISOString().split('T')[0]
+    const time = now.toTimeString().slice(0, 5).replace(':', '-')
+    link.download = `AskaNews_Data_${date}_${time}.csv`
     link.click()
   }
 
@@ -461,8 +464,10 @@ export default function Search() {
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Risultati')
 
-    const today = new Date().toISOString().split('T')[0]
-    XLSX.writeFile(wb, `ricerche_google_valueserp_${today}.xlsx`)
+    const now = new Date()
+    const date = now.toISOString().split('T')[0]
+    const time = now.toTimeString().slice(0, 5).replace(':', '-')
+    XLSX.writeFile(wb, `AskaNews_Data_${date}_${time}.xlsx`)
   }
 
   const successCount = results.filter((r) => r.url && !r.error).length
