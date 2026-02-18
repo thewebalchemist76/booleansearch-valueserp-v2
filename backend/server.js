@@ -35,6 +35,8 @@ const WP_INTERNAL_SEARCH_DOMAINS = new Set([
   'corrierediancona.it',
   'notiziarioflegreo.it',
   'cittadi.it',
+  'cittadinapoli.com',
+  'magazine-italia.it',
   'cronachedelmezzogiorno.it',
   'cronachedellacalabria.it',
   'lacittadiroma.it',
