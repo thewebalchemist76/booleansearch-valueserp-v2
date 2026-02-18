@@ -253,10 +253,12 @@ async function tryWpDirectUrl(domain, query) {
 }
 
 async function tryCittadinoDirectAndSearch(domain, slug, query) {
+  // Log univoco: se non vedi questa riga su Render, il deploy non ha questo codice
+  console.log('CITTADINO_V2_ENTRY');
   const baseUrl = `https://${domain}`;
   const headers = { ...BROWSER_LIKE_HEADERS };
 
-  console.log(`🔎 [cittadino] slug="${slug}" query="${query.slice(0, 50)}..."`);
+  console.log(`[cittadino] slug="${slug}" query="${query.slice(0, 50)}..."`);
 
   // 1) Try WordPress REST API first (no HTML/JS, works from server)
   try {
@@ -377,7 +379,8 @@ app.post('/api/search', async (req, res) => {
         url: '',
         title: '',
         description: '',
-        error: 'Nessun risultato trovato'
+        error: 'Nessun risultato trovato',
+        _build: 'cittadino-v2'  // se vedi questo nella risposta API, il codice nuovo è deployato
       });
     }
 
