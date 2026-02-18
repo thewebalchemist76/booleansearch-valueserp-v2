@@ -110,6 +110,14 @@ body {
   font-size: 0.85rem;
 }
 
+.search-link {
+  color: #2563eb;
+  text-decoration: none;
+}
+.search-link:hover {
+  text-decoration: underline;
+}
+
 .search-button {
   width: 100%;
   padding: 14px 24px;

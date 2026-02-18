@@ -7,6 +7,7 @@ import App from './App.jsx'
 import Login from './Login.jsx'
 import Dashboard from './Dashboard.jsx'
 import Search from './Search.jsx'
+import Searches from './Searches.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
 import { supabase } from './supabaseClient.js'
 
@@ -70,6 +71,15 @@ function Root() {
           element={
             <ProtectedRoute session={session}>
               <Search />
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/searches"
+          element={
+            <ProtectedRoute session={session}>
+              <Searches />
             </ProtectedRoute>
           }
         />

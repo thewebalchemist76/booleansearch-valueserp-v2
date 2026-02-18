@@ -412,7 +412,7 @@ export default function Search() {
     link.click()
   }
 
-  const downloadXLSX = () => {
+  const downloadXLSX = async () => {
     if (results.length === 0) return
 
     const rows = []
@@ -467,7 +467,42 @@ export default function Search() {
     const now = new Date()
     const date = now.toISOString().split('T')[0]
     const time = now.toTimeString().slice(0, 5).replace(':', '-')
-    XLSX.writeFile(wb, `AskaNews_Data_${date}_${time}.xlsx`)
+    const fileName = `AskaNews_Data_${date}_${time}.xlsx`
+    XLSX.writeFile(wb, fileName)
+
+    // Salva in Supabase per "Tutte le ricerche" (Storage + tabella)
+    if (userId && selectedProjectId) {
+      try {
+        const projectName = (projects.find((p) => p.id === selectedProjectId) || {}).name || ''
+        const articleCount = new Set(results.map((r) => r.article)).size
+        const domainCount = new Set(results.map((r) => r.domain)).size
+        const articlesPreview = [...new Set(results.map((r) => r.article))].slice(0, 10).join(', ')
+        const domainsPreview = [...new Set(results.map((r) => r.domain))].slice(0, 10).join(', ')
+        const searchSummary = (articlesPreview + ' | ' + domainsPreview).slice(0, 500)
+
+        const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'arraybuffer' })
+        const filePath = `${userId}/${Date.now()}_${fileName}`
+
+        const { error: upErr } = await supabase.storage.from('search-exports').upload(filePath, buffer, {
+          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          upsert: false,
+        })
+        if (upErr) throw upErr
+
+        await supabase.from('search_exports').insert({
+          project_id: selectedProjectId,
+          user_id: userId,
+          project_name: projectName,
+          file_name: fileName,
+          file_path: filePath,
+          article_count: articleCount,
+          domain_count: domainCount,
+          search_summary: searchSummary,
+        })
+      } catch (err) {
+        console.warn('Salvataggio in Tutte le ricerche non riuscito:', err)
+      }
+    }
   }
 
   const successCount = results.filter((r) => r.url && !r.error).length
@@ -522,7 +557,12 @@ export default function Search() {
                 ))
               )}
             </select>
-            <small>{loadingDomains ? 'Caricamento domini...' : 'I domini arrivano dal progetto selezionato.'}</small>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 4 }}>
+              <small style={{ margin: 0 }}>{loadingDomains ? 'Caricamento domini...' : 'I domini arrivano dal progetto selezionato.'}</small>
+              <a href="/searches" className="search-link" style={{ fontSize: '0.95rem', fontWeight: 500 }}>
+                📋 Tutte le ricerche
+              </a>
+            </div>
           </div>
 
           {/* Domini visibili solo al TL/Owner */}
