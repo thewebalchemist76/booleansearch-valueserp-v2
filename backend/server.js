@@ -94,6 +94,34 @@ function extractHtmlTitle(html) {
     .slice(0, 200);
 }
 
+function extractFirstWpSearchResultLink(html, baseUrl) {
+  if (!html) return '';
+  const text = String(html);
+  // Try common WP search result patterns first
+  const patterns = [
+    /<a[^>]+class=["'][^"']*search-result[^"']*["'][^>]+href=["']([^"']+)["']/i,
+    /<h2[^>]*class=["'][^"']*entry-title[^"']*["'][^>]*>\s*<a[^>]+href=["']([^"']+)["']/i,
+    /<h3[^>]*class=["'][^"']*entry-title[^"']*["'][^>]*>\s*<a[^>]+href=["']([^"']+)["']/i,
+    /<article[^>]*>\s*<header[^>]*>[\s\S]*?<a[^>]+href=["']([^"']+)["']/i,
+    /<a[^>]+href=["']([^"']+)["'][^>]*class=["'][^"']*entry-title[^"']*["']/i,
+  ];
+
+  for (const re of patterns) {
+    const m = text.match(re);
+    if (m && m[1]) return m[1];
+  }
+
+  // Fallback: first post-like link under / or with the same host
+  const generic = text.match(/<a[^>]+href=["']([^"']+)["'][^>]*>/i);
+  if (generic && generic[1]) {
+    const href = generic[1];
+    if (href.startsWith('http')) return href;
+    if (href.startsWith('/')) return `${baseUrl}${href}`;
+  }
+
+  return '';
+}
+
 async function tryWpDirectUrl(domain, query) {
   const d = normalizeDomainForChecks(domain);
   const slug = slugify(query);
@@ -136,6 +164,28 @@ async function tryWpDirectUrl(domain, query) {
     } catch (_) {
       // prova prossimo candidato
     }
+  }
+
+  // Fallback: WP internal search (?s=)
+  try {
+    const baseUrl = `https://${d}`;
+    const searchUrl = `${baseUrl}/?s=${encodeURIComponent(query)}`;
+    const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0' } }, 9000);
+
+    if (res && res.ok) {
+      const body = await res.text();
+      const firstLink = extractFirstWpSearchResultLink(body, baseUrl);
+      if (firstLink) {
+        const title = extractHtmlTitle(body);
+        return {
+          url: firstLink,
+          title: title || '',
+          description: '',
+        };
+      }
+    }
+  } catch (_) {
+    // ignore and return null
   }
 
   return null;
