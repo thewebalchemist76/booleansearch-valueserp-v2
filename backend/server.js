@@ -1,7 +1,11 @@
 const express = require('express');
 const cors = require('cors');
+const https = require('https');
 const fetch = require('node-fetch');
 const { getJson } = require('serpapi');
+
+// Agent che ignora verifica SSL (solo per siti con catena certificati non riconosciuta da Node su Render, es. cittadino.ca)
+const noVerifyHttpsAgent = new https.Agent({ rejectUnauthorized: false });
 
 const app = express();
 const PORT = process.env.PORT || 10000;
@@ -263,10 +267,12 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
   // cittadino.ca risponde lento da Render → timeout lunghi
   const CITTADINO_TIMEOUT_MS = 22000;
 
+  const fetchOpts = { method: 'GET', headers, agent: noVerifyHttpsAgent };
+
   // 1) Try WordPress REST API first (no HTML/JS, works from server)
   try {
     const wpSearchUrl = `${baseUrl}/wp-json/wp/v2/posts?search=${encodeURIComponent(query)}&per_page=5&_embed`;
-    const res = await fetchWithTimeout(wpSearchUrl, { method: 'GET', headers }, CITTADINO_TIMEOUT_MS);
+    const res = await fetchWithTimeout(wpSearchUrl, { ...fetchOpts }, CITTADINO_TIMEOUT_MS);
     if (res && res.ok) {
       const json = await res.json();
       if (Array.isArray(json) && json.length > 0) {
@@ -290,7 +296,7 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
   for (const url of directCandidates) {
     try {
       const timeout = domain === 'cittadino.ca' ? CITTADINO_TIMEOUT_MS : 9000;
-      const res = await fetchWithTimeout(url, { method: 'GET', headers }, timeout);
+      const res = await fetchWithTimeout(url, { ...fetchOpts }, timeout);
       if (domain === 'cittadino.ca') console.log(`[cittadino] direct ${url} => ${res ? res.status : 'no res'}`);
       if (!res || !res.ok) continue;
       const body = await res.text();
@@ -316,7 +322,7 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
       : `${baseUrl}/?s=${encodeURIComponent(query)}`;
     const searchHeaders = domain === 'cittadino.ca' ? { ...headers, Referer: baseUrl + '/' } : headers;
     const searchTimeout = domain === 'cittadino.ca' ? CITTADINO_TIMEOUT_MS : 9000;
-    const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers: searchHeaders }, searchTimeout);
+    const res = await fetchWithTimeout(searchUrl, { ...fetchOpts, headers: searchHeaders }, searchTimeout);
     if (domain === 'cittadino.ca') {
       console.log(`[cittadino] search ${searchUrl.slice(0, 80)}... => status=${res ? res.status : 'none'}`);
     }
