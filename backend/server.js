@@ -104,11 +104,29 @@ function extractFirstWpSearchResultLink(html, baseUrl) {
     /<h3[^>]*class=["'][^"']*entry-title[^"']*["'][^>]*>\s*<a[^>]+href=["']([^"']+)["']/i,
     /<article[^>]*>\s*<header[^>]*>[\s\S]*?<a[^>]+href=["']([^"']+)["']/i,
     /<a[^>]+href=["']([^"']+)["'][^>]*class=["'][^"']*entry-title[^"']*["']/i,
+    /<h4[^>]*class=["'][^"']*elementor-post__title[^"']*["'][^>]*>\s*<a[^>]+href=["']([^"']+)["']/i,
   ];
 
   for (const re of patterns) {
     const m = text.match(re);
     if (m && m[1]) return m[1];
+  }
+
+  // Elementor cards: prefer real posts over attachments
+  const articleRe = /<article[^>]*class=["'][^"']*elementor-post[^"']*["'][^>]*>[\s\S]*?<\/article>/gi;
+  const articleBlocks = text.match(articleRe) || [];
+  const pickFromBlock = (block) => {
+    const m = block.match(/<h4[^>]*class=["'][^"']*elementor-post__title[^"']*["'][^>]*>\s*<a[^>]+href=["']([^"']+)["']/i);
+    return m && m[1] ? m[1] : '';
+  };
+  const preferred = articleBlocks.find((b) => /type-post/i.test(b));
+  if (preferred) {
+    const link = pickFromBlock(preferred);
+    if (link) return link;
+  }
+  for (const block of articleBlocks) {
+    const link = pickFromBlock(block);
+    if (link) return link;
   }
 
   // Fallback: first post-like link under / or with the same host
