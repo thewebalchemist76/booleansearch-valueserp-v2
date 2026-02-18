@@ -104,13 +104,27 @@ function extractFirstWpSearchResultLink(html, baseUrl) {
     /<h3[^>]*class=["'][^"']*entry-title[^"']*["'][^>]*>\s*<a[^>]+href=["']([^"']+)["']/i,
     /<article[^>]*>\s*<header[^>]*>[\s\S]*?<a[^>]+href=["']([^"']+)["']/i,
     /<a[^>]+href=["']([^"']+)["'][^>]*class=["'][^"']*entry-title[^"']*["']/i,
-    /<h4[^>]*class=["'][^"']*elementor-post__title[^"']*["'][^>]*>\s*<a[^>]+href=["']([^"']+)["']/i,
   ];
 
   for (const re of patterns) {
     const m = text.match(re);
     if (m && m[1]) return m[1];
   }
+
+  // Fallback: first post-like link under / or with the same host
+  const generic = text.match(/<a[^>]+href=["']([^"']+)["'][^>]*>/i);
+  if (generic && generic[1]) {
+    const href = generic[1];
+    if (href.startsWith('http')) return href;
+    if (href.startsWith('/')) return `${baseUrl}${href}`;
+  }
+
+  return '';
+}
+
+function extractFirstWpSearchResultLinkForCittadino(html, baseUrl) {
+  if (!html) return '';
+  const text = String(html);
 
   // Elementor cards: prefer real posts over attachments
   const articleRe = /<article[^>]*class=["'][^"']*elementor-post[^"']*["'][^>]*>[\s\S]*?<\/article>/gi;
@@ -129,15 +143,7 @@ function extractFirstWpSearchResultLink(html, baseUrl) {
     if (link) return link;
   }
 
-  // Fallback: first post-like link under / or with the same host
-  const generic = text.match(/<a[^>]+href=["']([^"']+)["'][^>]*>/i);
-  if (generic && generic[1]) {
-    const href = generic[1];
-    if (href.startsWith('http')) return href;
-    if (href.startsWith('/')) return `${baseUrl}${href}`;
-  }
-
-  return '';
+  return extractFirstWpSearchResultLink(text, baseUrl);
 }
 
 async function tryWpDirectUrl(domain, query) {
@@ -192,7 +198,9 @@ async function tryWpDirectUrl(domain, query) {
 
     if (res && res.ok) {
       const body = await res.text();
-      const firstLink = extractFirstWpSearchResultLink(body, baseUrl);
+      const firstLink = d === 'cittadino.ca'
+        ? extractFirstWpSearchResultLinkForCittadino(body, baseUrl)
+        : extractFirstWpSearchResultLink(body, baseUrl);
       if (firstLink) {
         const title = extractHtmlTitle(body);
         return {
