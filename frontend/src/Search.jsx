@@ -362,15 +362,25 @@ export default function Search() {
   const downloadCSV = () => {
     if (results.length === 0) return
 
-    const headers = ['Dominio', 'Articolo', 'Query di Ricerca', 'Link Articolo', 'Titolo', 'Errore']
+    const normalizeCheckText = (value) =>
+      String(value || '')
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, ' ')
+
+    const getControllo = (article, title) =>
+      normalizeCheckText(title) && normalizeCheckText(title) !== normalizeCheckText(article)
+        ? 'controllo necessario'
+        : ''
+
+    const headers = ['Dominio', 'Articolo', 'Query di Ricerca', 'Link Articolo', 'Titolo', 'Controllo']
     const rows = results.map((r) => [
       r.domain,
       r.article,
       r.searchQuery,
       r.url,
       r.title,
-      r.description || '',
-      r.error || '',
+      getControllo(r.article, r.title),
     ])
 
     const csvContent = [
@@ -401,13 +411,23 @@ export default function Search() {
     const rows = []
 
     for (const r of results) {
+      const normalizeCheckText = (value) =>
+        String(value || '')
+          .toLowerCase()
+          .trim()
+          .replace(/\s+/g, ' ')
+      const controllo =
+        normalizeCheckText(r.title) && normalizeCheckText(r.title) !== normalizeCheckText(r.article)
+          ? 'controllo necessario'
+          : ''
+
       rows.push({
         Dominio: r.domain,
         Articolo: r.article,
         'Query di Ricerca': r.searchQuery,
         'Link Articolo': r.url,
         Titolo: r.title,
-        Errore: r.error || '',
+        Controllo: controllo,
       })
 
       const domainNorm = String(r.domain || '').toLowerCase().trim().replace(/^www\./, '')
@@ -422,7 +442,7 @@ export default function Search() {
               'Query di Ricerca': r.searchQuery,
               'Link Articolo': normalizeUrlJoin(targetBase, suffix),
               Titolo: r.title,
-              Errore: '',
+              Controllo: controllo,
             })
           }
         }
