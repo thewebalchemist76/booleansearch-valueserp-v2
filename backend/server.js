@@ -66,6 +66,8 @@ const BROWSER_LIKE_HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
   'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Cache-Control': 'no-cache',
+  'Pragma': 'no-cache',
 };
 
 function slugify(text) {
@@ -254,6 +256,27 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
   const baseUrl = `https://${domain}`;
   const headers = { ...BROWSER_LIKE_HEADERS };
 
+  console.log(`🔎 [cittadino] slug="${slug}" query="${query.slice(0, 50)}..."`);
+
+  // 1) Try WordPress REST API first (no HTML/JS, works from server)
+  try {
+    const wpSearchUrl = `${baseUrl}/wp-json/wp/v2/posts?search=${encodeURIComponent(query)}&per_page=5&_embed`;
+    const res = await fetchWithTimeout(wpSearchUrl, { method: 'GET', headers }, 8000);
+    if (res && res.ok) {
+      const json = await res.json();
+      if (Array.isArray(json) && json.length > 0) {
+        const post = json[0];
+        const link = post.link || (post.guid && post.guid.rendered);
+        if (link) {
+          console.log(`✅ [cittadino] found via WP REST API: ${link}`);
+          return { url: link, title: (post.title && post.title.rendered) || '', description: (post.excerpt && post.excerpt.rendered) || '' };
+        }
+      }
+    }
+  } catch (e) {
+    console.log(`🔎 [cittadino] WP REST API skip: ${e.message}`);
+  }
+
   const directCandidates = [
     `${baseUrl}/${slug}/`,
     `${baseUrl}/${slug}/${slug}-2/`,
@@ -262,6 +285,7 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
   for (const url of directCandidates) {
     try {
       const res = await fetchWithTimeout(url, { method: 'GET', headers }, 9000);
+      if (domain === 'cittadino.ca') console.log(`[cittadino] direct ${url} => ${res ? res.status : 'no res'}`);
       if (!res || !res.ok) continue;
       const body = await res.text();
       const bodyLower = body.toLowerCase();
@@ -274,8 +298,8 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
       }
       const title = extractHtmlTitle(body);
       return { url: res.url || url, title: title || '', description: '' };
-    } catch (_) {
-      // try next
+    } catch (e) {
+      if (domain === 'cittadino.ca') console.log(`[cittadino] direct ${url} error:`, e.message);
     }
   }
 
@@ -284,17 +308,30 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
     const searchUrl = domain === 'cittadino.ca'
       ? `${baseUrl}/?s=${encodeURIComponent(query)}&id=194654`
       : `${baseUrl}/?s=${encodeURIComponent(query)}`;
-    const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers }, 9000);
+    const searchHeaders = domain === 'cittadino.ca' ? { ...headers, Referer: baseUrl + '/' } : headers;
+    const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers: searchHeaders }, 9000);
+    if (domain === 'cittadino.ca') {
+      console.log(`[cittadino] search ${searchUrl.slice(0, 80)}... => status=${res ? res.status : 'none'}`);
+    }
     if (!res || !res.ok) return null;
     const body = await res.text();
+    if (domain === 'cittadino.ca') {
+      console.log(`[cittadino] search body length=${body.length} hasElementor=${body.includes('elementor')} hasArticle=${body.includes('<article')}`);
+    }
     const firstLink = extractFirstWpSearchResultLinkForCittadino(body, baseUrl);
+    if (domain === 'cittadino.ca' && !firstLink) {
+      const articleRe = /<article[^>]*class=["'][^"']*elementor-post[^"']*["'][^>]*>/gi;
+      const blocks = body.match(articleRe) || [];
+      console.log(`[cittadino] parse: articleBlocks=${blocks.length} firstLink=${firstLink || 'none'}`);
+    }
     if (firstLink) {
       return { url: firstLink, title: '', description: '' };
     }
-  } catch (_) {
-    // ignore
+  } catch (e) {
+    if (domain === 'cittadino.ca') console.log(`[cittadino] search error:`, e.message);
   }
 
+  console.log(`⚠️ [cittadino] no result (direct + search + parse failed)`);
   return null;
 }
 
