@@ -151,6 +151,11 @@ async function tryWpDirectUrl(domain, query) {
   const slug = slugify(query);
   if (!d || !slug) return null;
 
+  if (d === 'cittadino.ca') {
+    const found = await tryCittadinoDirectAndSearch(d, slug, query);
+    if (found) return found;
+  }
+
   // prova i due pattern visti: /video/slug/ e /slug/
   const candidates = [
     `https://${d}/video/${slug}/`,
@@ -212,6 +217,51 @@ async function tryWpDirectUrl(domain, query) {
     }
   } catch (_) {
     // ignore and return null
+  }
+
+  return null;
+}
+
+async function tryCittadinoDirectAndSearch(domain, slug, query) {
+  const baseUrl = `https://${domain}`;
+  const headers = { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7' };
+
+  const directCandidates = [
+    `${baseUrl}/${slug}/`,
+    `${baseUrl}/${slug}/${slug}-2/`,
+  ];
+
+  for (const url of directCandidates) {
+    try {
+      const res = await fetchWithTimeout(url, { method: 'GET', headers }, 9000);
+      if (!res || !res.ok) continue;
+      const body = await res.text();
+      const bodyLower = body.toLowerCase();
+      if (
+        bodyLower.includes('nessun risultato') ||
+        bodyLower.includes('nothing found') ||
+        bodyLower.includes('no results found')
+      ) {
+        continue;
+      }
+      const title = extractHtmlTitle(body);
+      return { url: res.url || url, title: title || '', description: '' };
+    } catch (_) {
+      // try next
+    }
+  }
+
+  try {
+    const searchUrl = `${baseUrl}/?s=${encodeURIComponent(query)}`;
+    const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers }, 9000);
+    if (!res || !res.ok) return null;
+    const body = await res.text();
+    const firstLink = extractFirstWpSearchResultLinkForCittadino(body, baseUrl);
+    if (firstLink) {
+      return { url: firstLink, title: '', description: '' };
+    }
+  } catch (_) {
+    // ignore
   }
 
   return null;
