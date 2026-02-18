@@ -37,6 +37,7 @@ const WP_INTERNAL_SEARCH_DOMAINS = new Set([
   'cittadi.it',
   'cittadinapoli.com',
   'magazine-italia.it',
+  'cittadino.ca',
   'cronachedelmezzogiorno.it',
   'cronachedellacalabria.it',
   'lacittadiroma.it',
