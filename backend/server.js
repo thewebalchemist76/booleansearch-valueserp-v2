@@ -61,6 +61,13 @@ function isWpInternalDomain(domain) {
   return WP_INTERNAL_SEARCH_DOMAINS.has(d);
 }
 
+// Headers that mimic a real browser (sites like cittadino.ca may serve different HTML to bots)
+const BROWSER_LIKE_HEADERS = {
+  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7',
+};
+
 function slugify(text) {
   return String(text || '')
     .toLowerCase()
@@ -129,10 +136,21 @@ function extractFirstWpSearchResultLinkForCittadino(html, baseUrl) {
   // Elementor cards: prefer real posts over attachments
   const articleRe = /<article[^>]*class=["'][^"']*elementor-post[^"']*["'][^>]*>[\s\S]*?<\/article>/gi;
   const articleBlocks = text.match(articleRe) || [];
+
   const pickFromBlock = (block) => {
-    const m = block.match(/<h4[^>]*class=["'][^"']*elementor-post__title[^"']*["'][^>]*>\s*<a[^>]+href=["']([^"']+)["']/i);
-    return m && m[1] ? m[1] : '';
+    // Strict: h4.elementor-post__title then <a href="...">
+    let m = block.match(/<h4[^>]*class=["']([^"']*elementor-post__title[^"']*)["'][^>]*>[\s\S]*?<a[^>]+href=["']([^"']+)["']/i);
+    if (m && m[2]) return m[2];
+    // Relaxed: any <a href="..."> inside block that contains elementor-post__title (same host)
+    const hasTitle = /elementor-post__title/i.test(block);
+    if (hasTitle) {
+      m = block.match(/href=["'](https?:\/\/[^"']+)["']/i);
+      const host = baseUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+      if (m && m[1] && m[1].includes(host)) return m[1];
+    }
+    return '';
   };
+
   const preferred = articleBlocks.find((b) => /type-post/i.test(b));
   if (preferred) {
     const link = pickFromBlock(preferred);
@@ -141,6 +159,15 @@ function extractFirstWpSearchResultLinkForCittadino(html, baseUrl) {
   for (const block of articleBlocks) {
     const link = pickFromBlock(block);
     if (link) return link;
+  }
+
+  // Fallback: first post-like URL in archive area (e.g. after elementor-widget-archive-posts)
+  const host = baseUrl.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  const archiveIdx = text.indexOf('elementor-widget-archive-posts');
+  if (archiveIdx !== -1) {
+    const fragment = text.slice(archiveIdx, archiveIdx + 15000);
+    const linkMatch = fragment.match(/href=["'](https?:\/\/[^"']+\/[a-z0-9-]+\/[a-z0-9-/]*\/?)["']/i);
+    if (linkMatch && linkMatch[1] && linkMatch[1].includes(host)) return linkMatch[1];
   }
 
   return extractFirstWpSearchResultLink(text, baseUrl);
@@ -199,7 +226,8 @@ async function tryWpDirectUrl(domain, query) {
   try {
     const baseUrl = `https://${d}`;
     const searchUrl = `${baseUrl}/?s=${encodeURIComponent(query)}`;
-    const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0' } }, 9000);
+    const headers = d === 'cittadino.ca' ? BROWSER_LIKE_HEADERS : { 'User-Agent': 'Mozilla/5.0' };
+    const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers }, 9000);
 
     if (res && res.ok) {
       const body = await res.text();
@@ -224,7 +252,7 @@ async function tryWpDirectUrl(domain, query) {
 
 async function tryCittadinoDirectAndSearch(domain, slug, query) {
   const baseUrl = `https://${domain}`;
-  const headers = { 'User-Agent': 'Mozilla/5.0', 'Accept-Language': 'it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7' };
+  const headers = { ...BROWSER_LIKE_HEADERS };
 
   const directCandidates = [
     `${baseUrl}/${slug}/`,
@@ -252,7 +280,10 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
   }
 
   try {
-    const searchUrl = `${baseUrl}/?s=${encodeURIComponent(query)}`;
+    // cittadino.ca shows search results only when the page id is in the URL (WP page ID of search results template)
+    const searchUrl = domain === 'cittadino.ca'
+      ? `${baseUrl}/?s=${encodeURIComponent(query)}&id=194654`
+      : `${baseUrl}/?s=${encodeURIComponent(query)}`;
     const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers }, 9000);
     if (!res || !res.ok) return null;
     const body = await res.text();
