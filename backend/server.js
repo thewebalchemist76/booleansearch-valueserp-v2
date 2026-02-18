@@ -260,10 +260,13 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
 
   console.log(`[cittadino] slug="${slug}" query="${query.slice(0, 50)}..."`);
 
+  // cittadino.ca risponde lento da Render → timeout lunghi
+  const CITTADINO_TIMEOUT_MS = 22000;
+
   // 1) Try WordPress REST API first (no HTML/JS, works from server)
   try {
     const wpSearchUrl = `${baseUrl}/wp-json/wp/v2/posts?search=${encodeURIComponent(query)}&per_page=5&_embed`;
-    const res = await fetchWithTimeout(wpSearchUrl, { method: 'GET', headers }, 8000);
+    const res = await fetchWithTimeout(wpSearchUrl, { method: 'GET', headers }, CITTADINO_TIMEOUT_MS);
     if (res && res.ok) {
       const json = await res.json();
       if (Array.isArray(json) && json.length > 0) {
@@ -286,7 +289,8 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
 
   for (const url of directCandidates) {
     try {
-      const res = await fetchWithTimeout(url, { method: 'GET', headers }, 9000);
+      const timeout = domain === 'cittadino.ca' ? CITTADINO_TIMEOUT_MS : 9000;
+      const res = await fetchWithTimeout(url, { method: 'GET', headers }, timeout);
       if (domain === 'cittadino.ca') console.log(`[cittadino] direct ${url} => ${res ? res.status : 'no res'}`);
       if (!res || !res.ok) continue;
       const body = await res.text();
@@ -311,7 +315,8 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
       ? `${baseUrl}/?s=${encodeURIComponent(query)}&id=194654`
       : `${baseUrl}/?s=${encodeURIComponent(query)}`;
     const searchHeaders = domain === 'cittadino.ca' ? { ...headers, Referer: baseUrl + '/' } : headers;
-    const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers: searchHeaders }, 9000);
+    const searchTimeout = domain === 'cittadino.ca' ? CITTADINO_TIMEOUT_MS : 9000;
+    const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers: searchHeaders }, searchTimeout);
     if (domain === 'cittadino.ca') {
       console.log(`[cittadino] search ${searchUrl.slice(0, 80)}... => status=${res ? res.status : 'none'}`);
     }
