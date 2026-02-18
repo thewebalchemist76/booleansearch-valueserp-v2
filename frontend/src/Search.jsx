@@ -368,10 +368,14 @@ export default function Search() {
         .trim()
         .replace(/\s+/g, ' ')
 
-    const getControllo = (article, title) =>
-      normalizeCheckText(title) && normalizeCheckText(title) !== normalizeCheckText(article)
-        ? 'controllo necessario'
-        : ''
+    const getControllo = (article, title) => {
+      const a = normalizeCheckText(article)
+      const t = normalizeCheckText(title)
+      if (!t) return ''
+      if (t === a) return ''
+      if (t.includes(a) || a.includes(t)) return ''
+      return 'controllo necessario'
+    }
 
     const headers = ['Dominio', 'Articolo', 'Query di Ricerca', 'Link Articolo', 'Titolo', 'Controllo']
     const rows = results.map((r) => [
@@ -416,10 +420,14 @@ export default function Search() {
           .toLowerCase()
           .trim()
           .replace(/\s+/g, ' ')
+      const a = normalizeCheckText(r.article)
+      const t = normalizeCheckText(r.title)
       const controllo =
-        normalizeCheckText(r.title) && normalizeCheckText(r.title) !== normalizeCheckText(r.article)
-          ? 'controllo necessario'
-          : ''
+        !t
+          ? ''
+          : t === a || t.includes(a) || a.includes(t)
+            ? ''
+            : 'controllo necessario'
 
       rows.push({
         Dominio: r.domain,
