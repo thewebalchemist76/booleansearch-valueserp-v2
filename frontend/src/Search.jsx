@@ -403,7 +403,7 @@ export default function Search() {
     const date = now.toISOString().split('T')[0]
     const time = now.toTimeString().slice(0, 5).replace(':', '-')
     const fileName = `AskaNews_${date}_${time}.xlsx`
-    const filePath = `${userId}/${Date.now()}_${fileName}`
+    const filePath = `${userId}/${fileName}`
     // Genera bytes senza ArrayBuffer (evita "Unrecognized type arraybuffer" in alcuni ambienti)
     const binary = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' })
     const bytes = new Uint8Array(binary.length)
