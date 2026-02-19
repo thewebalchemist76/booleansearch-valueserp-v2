@@ -214,16 +214,9 @@ export default function Searches() {
                       <th onClick={() => handleSort('created_at')} style={{ cursor: 'pointer' }}>
                         Data {sortBy === 'created_at' && (sortOrder === SORT_ASC ? '↑' : '↓')}
                       </th>
-                      <th onClick={() => handleSort('project_name')} style={{ cursor: 'pointer' }}>
-                        Progetto {sortBy === 'project_name' && (sortOrder === SORT_ASC ? '↑' : '↓')}
+                      <th onClick={() => handleSort('search_summary')} style={{ cursor: 'pointer' }}>
+                        Titolo articolo {sortBy === 'search_summary' && (sortOrder === SORT_ASC ? '↑' : '↓')}
                       </th>
-                      <th onClick={() => handleSort('article_count')} style={{ cursor: 'pointer' }}>
-                        Articoli {sortBy === 'article_count' && (sortOrder === SORT_ASC ? '↑' : '↓')}
-                      </th>
-                      <th onClick={() => handleSort('domain_count')} style={{ cursor: 'pointer' }}>
-                        Domini {sortBy === 'domain_count' && (sortOrder === SORT_ASC ? '↑' : '↓')}
-                      </th>
-                      <th>File</th>
                       <th>Azioni</th>
                     </tr>
                   </thead>
@@ -231,10 +224,7 @@ export default function Searches() {
                     {list.map((row) => (
                       <tr key={row.id}>
                         <td>{formatDate(row.created_at)}</td>
-                        <td>{row.project_name || '-'}</td>
-                        <td>{row.article_count ?? '-'}</td>
-                        <td>{row.domain_count ?? '-'}</td>
-                        <td>{row.file_name || '-'}</td>
+                        <td className="article-cell">{(row.search_summary && row.search_summary.split(' | ')[0]) || '-'}</td>
                         <td>
                           <button
                             type="button"

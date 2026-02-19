@@ -402,7 +402,7 @@ export default function Search() {
     const now = new Date()
     const date = now.toISOString().split('T')[0]
     const time = now.toTimeString().slice(0, 5).replace(':', '-')
-    const fileName = `AskaNews_Data_${date}_${time}.xlsx`
+    const fileName = `AskaNews_${date}_${time}.xlsx`
     const filePath = `${userId}/${Date.now()}_${fileName}`
     // Genera bytes senza ArrayBuffer (evita "Unrecognized type arraybuffer" in alcuni ambienti)
     const binary = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' })
@@ -505,7 +505,7 @@ export default function Search() {
     const now = new Date()
     const date = now.toISOString().split('T')[0]
     const time = now.toTimeString().slice(0, 5).replace(':', '-')
-    link.download = `AskaNews_Data_${date}_${time}.csv`
+    link.download = `AskaNews_${date}_${time}.csv`
     link.click()
   }
 
@@ -564,7 +564,7 @@ export default function Search() {
     const now = new Date()
     const date = now.toISOString().split('T')[0]
     const time = now.toTimeString().slice(0, 5).replace(':', '-')
-    const fileName = `AskaNews_Data_${date}_${time}.xlsx`
+    const fileName = `AskaNews_${date}_${time}.xlsx`
     XLSX.writeFile(wb, fileName)
     // L'export è già in "Tutte le ricerche" (salvato automaticamente al termine della ricerca)
   }
