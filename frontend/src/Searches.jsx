@@ -107,9 +107,16 @@ export default function Searches() {
     try {
       const { data, error: err } = await supabase.storage.from('search-exports').createSignedUrl(row.file_path, 120)
       if (err) throw err
-      if (data?.signedUrl) {
-        window.open(data.signedUrl, '_blank')
-      }
+      if (!data?.signedUrl) throw new Error('URL non disponibile')
+      const res = await fetch(data.signedUrl)
+      if (!res.ok) throw new Error(`Download: ${res.status}`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = row.file_name || 'AskaNews_export.xlsx'
+      a.click()
+      URL.revokeObjectURL(url)
     } catch (e) {
       setError('Download non disponibile: ' + e.message)
     }
