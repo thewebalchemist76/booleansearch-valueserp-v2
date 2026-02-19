@@ -26,6 +26,8 @@ export default function Search() {
   const [selectedProjectId, setSelectedProjectId] = useState('')
   const [loadingProjects, setLoadingProjects] = useState(false)
   const [loadingDomains, setLoadingDomains] = useState(false)
+  const [exportSaveError, setExportSaveError] = useState(null)
+  const [exportSaveOk, setExportSaveOk] = useState(false)
 
   const TISCALI_REGIONS = [
     'valle-aosta',
@@ -352,10 +354,14 @@ export default function Search() {
       }
 
       setResults(searchResults)
+      setExportSaveOk(false)
+      setExportSaveError(null)
 
       // Salvataggio automatico in "Tutte le ricerche" (Storage + tabella)
       if (userId && selectedProjectId && searchResults.length > 0) {
-        saveResultsToSupabase(searchResults).catch((err) => console.warn('Auto-save Tutte le ricerche:', err))
+        saveResultsToSupabase(searchResults)
+          .then(() => setExportSaveOk(true))
+          .catch((err) => setExportSaveError(err?.message || String(err)))
       }
     } catch (err) {
       setError(`Errore durante la ricerca: ${err.message}`)
@@ -404,7 +410,7 @@ export default function Search() {
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       upsert: false,
     })
-    if (upErr) throw upErr
+    if (upErr) throw new Error(upErr.message || 'Upload Storage fallito')
 
     const projectName = (projects.find((p) => p.id === selectedProjectId) || {}).name || ''
     const articleCount = new Set(resultsData.map((r) => r.article)).size
@@ -413,7 +419,7 @@ export default function Search() {
     const domainsPreview = [...new Set(resultsData.map((r) => r.domain))].slice(0, 10).join(', ')
     const searchSummary = (articlesPreview + ' | ' + domainsPreview).slice(0, 500)
 
-    await supabase.from('search_exports').insert({
+    const { error: insertErr } = await supabase.from('search_exports').insert({
       project_id: selectedProjectId,
       user_id: userId,
       project_name: projectName,
@@ -423,6 +429,7 @@ export default function Search() {
       domain_count: domainCount,
       search_summary: searchSummary,
     })
+    if (insertErr) throw new Error(insertErr.message || 'Inserimento tabella fallito')
   }
 
   const downloadCSV = () => {
@@ -650,6 +657,16 @@ export default function Search() {
 
         {results.length > 0 && (
           <div className="results-section">
+            {exportSaveError && (
+              <div className="error-message" style={{ marginBottom: 16 }}>
+                Salvataggio in Tutte le ricerche non riuscito: {exportSaveError}
+              </div>
+            )}
+            {exportSaveOk && !exportSaveError && (
+              <div style={{ marginBottom: 16, padding: 12, background: '#ecfdf5', borderRadius: 8, color: '#065f46' }}>
+                ✅ Salvato in Tutte le ricerche. Puoi scaricare l&apos;XLSX da <a href="/searches">Tutte le ricerche</a>.
+              </div>
+            )}
             <div className="results-header">
               <h2>
                 Risultati ({results.length})

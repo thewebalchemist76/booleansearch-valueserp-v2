@@ -196,7 +196,12 @@ export default function Searches() {
           {loading ? (
             <p className="progress-text">Caricamento...</p>
           ) : list.length === 0 ? (
-            <p className="progress-text">Nessuna ricerca salvata. Ogni ricerca completata viene salvata automaticamente; puoi scaricare l'XLSX da qui o dalla pagina Ricerca.</p>
+            <div className="progress-text">
+              <p>Nessuna ricerca salvata. Ogni ricerca completata viene salvata automaticamente.</p>
+              <p style={{ marginTop: 12, fontSize: '0.9rem', color: '#6b7280' }}>
+                Se hai appena fatto una ricerca e qui è vuoto, sulla pagina Ricerca dovresti vedere un messaggio di errore in rosso sotto i risultati: indica cosa non va (es. tabella o bucket Supabase non creati). Esegui lo script <code style={{ background: '#f3f4f6', padding: '2px 6px', borderRadius: 4 }}>supabase/search_exports_setup.sql</code> in Supabase → SQL Editor.
+              </p>
+            </div>
           ) : (
             <>
               <div className="results-header">
