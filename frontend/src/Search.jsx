@@ -403,15 +403,38 @@ export default function Search() {
     const date = now.toISOString().split('T')[0]
     const time = now.toTimeString().slice(0, 5).replace(':', '-')
     const fileName = `AskaNews_Data_${date}_${time}.xlsx`
-    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'arraybuffer' })
-    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const filePath = `${userId}/${Date.now()}_${fileName}`
-
-    const { error: upErr } = await supabase.storage.from('search-exports').upload(filePath, blob, {
-      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      upsert: false,
+    // Genera bytes senza ArrayBuffer (evita "Unrecognized type arraybuffer" in alcuni ambienti)
+    const binary = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' })
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) & 0xff
+    const uploadBody = new Blob([bytes], {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
-    if (upErr) throw new Error(upErr.message || 'Upload Storage fallito')
+
+    // Upload via REST API (nessun client Supabase Storage = nessun check su arraybuffer)
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL?.replace(/\/$/, '')
+    const { data: { session } } = await supabase.auth.getSession()
+    const token = session?.access_token || import.meta.env.VITE_SUPABASE_ANON_KEY
+    const res = await fetch(`${supabaseUrl}/storage/v1/object/search-exports/${filePath}`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        apikey: import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+        'Content-Type': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      },
+      body: uploadBody,
+    })
+    if (!res.ok) {
+      const errText = await res.text()
+      let errMsg = errText
+      try {
+        const j = JSON.parse(errText)
+        if (j.message) errMsg = j.message
+        if (j.error) errMsg = j.error
+      } catch (_) {}
+      throw new Error(errMsg || `Upload Storage: ${res.status}`)
+    }
 
     const projectName = (projects.find((p) => p.id === selectedProjectId) || {}).name || ''
     const articleCount = new Set(resultsData.map((r) => r.article)).size
