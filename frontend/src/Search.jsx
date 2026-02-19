@@ -404,9 +404,10 @@ export default function Search() {
     const time = now.toTimeString().slice(0, 5).replace(':', '-')
     const fileName = `AskaNews_Data_${date}_${time}.xlsx`
     const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'arraybuffer' })
+    const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
     const filePath = `${userId}/${Date.now()}_${fileName}`
 
-    const { error: upErr } = await supabase.storage.from('search-exports').upload(filePath, buffer, {
+    const { error: upErr } = await supabase.storage.from('search-exports').upload(filePath, blob, {
       contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       upsert: false,
     })
