@@ -196,7 +196,7 @@ export default function Searches() {
           {loading ? (
             <p className="progress-text">Caricamento...</p>
           ) : list.length === 0 ? (
-            <p className="progress-text">Nessuna ricerca salvata. Le ricerche vengono salvate quando scarichi un file XLSX dalla pagina Ricerca.</p>
+            <p className="progress-text">Nessuna ricerca salvata. Ogni ricerca completata viene salvata automaticamente; puoi scaricare l'XLSX da qui o dalla pagina Ricerca.</p>
           ) : (
             <>
               <div className="results-header">

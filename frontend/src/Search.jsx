@@ -352,11 +352,77 @@ export default function Search() {
       }
 
       setResults(searchResults)
+
+      // Salvataggio automatico in "Tutte le ricerche" (Storage + tabella)
+      if (userId && selectedProjectId && searchResults.length > 0) {
+        saveResultsToSupabase(searchResults).catch((err) => console.warn('Auto-save Tutte le ricerche:', err))
+      }
     } catch (err) {
       setError(`Errore durante la ricerca: ${err.message}`)
     } finally {
       setIsSearching(false)
     }
+  }
+
+  /** Costruisce XLSX, carica su Storage e inserisce in search_exports (per Tutte le ricerche) */
+  async function saveResultsToSupabase(resultsData) {
+    const rows = []
+    for (const r of resultsData) {
+      const normalizeCheckText = (v) => String(v || '').toLowerCase().trim().replace(/\s+/g, ' ')
+      const a = normalizeCheckText(r.article)
+      const t = normalizeCheckText(r.title)
+      const controllo = !t ? '' : t === a || t.includes(a) || a.includes(t) ? '' : 'controllo necessario'
+      rows.push({ Dominio: r.domain, Articolo: r.article, 'Query di Ricerca': r.searchQuery, 'Link Articolo': r.url, Titolo: r.title, Controllo: controllo })
+      const domainNorm = String(r.domain || '').toLowerCase().trim().replace(/^www\./, '')
+      if (domainNorm === 'notizie.tiscali.it' && r.url && !r.error) {
+        const suffix = extractTiscaliArticoliSuffix(r.url)
+        if (suffix) {
+          for (const region of TISCALI_REGIONS) {
+            rows.push({
+              Dominio: `notizie.tiscali.it/regioni/${region}`,
+              Articolo: r.article,
+              'Query di Ricerca': r.searchQuery,
+              'Link Articolo': normalizeUrlJoin(`https://notizie.tiscali.it/regioni/${region}`, suffix),
+              Titolo: r.title,
+              Controllo: controllo,
+            })
+          }
+        }
+      }
+    }
+    const ws = XLSX.utils.json_to_sheet(rows)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Risultati')
+    const now = new Date()
+    const date = now.toISOString().split('T')[0]
+    const time = now.toTimeString().slice(0, 5).replace(':', '-')
+    const fileName = `AskaNews_Data_${date}_${time}.xlsx`
+    const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'arraybuffer' })
+    const filePath = `${userId}/${Date.now()}_${fileName}`
+
+    const { error: upErr } = await supabase.storage.from('search-exports').upload(filePath, buffer, {
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      upsert: false,
+    })
+    if (upErr) throw upErr
+
+    const projectName = (projects.find((p) => p.id === selectedProjectId) || {}).name || ''
+    const articleCount = new Set(resultsData.map((r) => r.article)).size
+    const domainCount = new Set(resultsData.map((r) => r.domain)).size
+    const articlesPreview = [...new Set(resultsData.map((r) => r.article))].slice(0, 10).join(', ')
+    const domainsPreview = [...new Set(resultsData.map((r) => r.domain))].slice(0, 10).join(', ')
+    const searchSummary = (articlesPreview + ' | ' + domainsPreview).slice(0, 500)
+
+    await supabase.from('search_exports').insert({
+      project_id: selectedProjectId,
+      user_id: userId,
+      project_name: projectName,
+      file_name: fileName,
+      file_path: filePath,
+      article_count: articleCount,
+      domain_count: domainCount,
+      search_summary: searchSummary,
+    })
   }
 
   const downloadCSV = () => {
@@ -412,7 +478,7 @@ export default function Search() {
     link.click()
   }
 
-  const downloadXLSX = async () => {
+  const downloadXLSX = () => {
     if (results.length === 0) return
 
     const rows = []
@@ -469,40 +535,7 @@ export default function Search() {
     const time = now.toTimeString().slice(0, 5).replace(':', '-')
     const fileName = `AskaNews_Data_${date}_${time}.xlsx`
     XLSX.writeFile(wb, fileName)
-
-    // Salva in Supabase per "Tutte le ricerche" (Storage + tabella)
-    if (userId && selectedProjectId) {
-      try {
-        const projectName = (projects.find((p) => p.id === selectedProjectId) || {}).name || ''
-        const articleCount = new Set(results.map((r) => r.article)).size
-        const domainCount = new Set(results.map((r) => r.domain)).size
-        const articlesPreview = [...new Set(results.map((r) => r.article))].slice(0, 10).join(', ')
-        const domainsPreview = [...new Set(results.map((r) => r.domain))].slice(0, 10).join(', ')
-        const searchSummary = (articlesPreview + ' | ' + domainsPreview).slice(0, 500)
-
-        const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'arraybuffer' })
-        const filePath = `${userId}/${Date.now()}_${fileName}`
-
-        const { error: upErr } = await supabase.storage.from('search-exports').upload(filePath, buffer, {
-          contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-          upsert: false,
-        })
-        if (upErr) throw upErr
-
-        await supabase.from('search_exports').insert({
-          project_id: selectedProjectId,
-          user_id: userId,
-          project_name: projectName,
-          file_name: fileName,
-          file_path: filePath,
-          article_count: articleCount,
-          domain_count: domainCount,
-          search_summary: searchSummary,
-        })
-      } catch (err) {
-        console.warn('Salvataggio in Tutte le ricerche non riuscito:', err)
-      }
-    }
+    // L'export è già in "Tutte le ricerche" (salvato automaticamente al termine della ricerca)
   }
 
   const successCount = results.filter((r) => r.url && !r.error).length
