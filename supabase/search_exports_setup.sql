@@ -21,6 +21,10 @@ create index if not exists idx_search_exports_created_at on public.search_export
 
 alter table public.search_exports enable row level security;
 
+-- RLS: rimuovi policy se esistono (così lo script si può rieseguire)
+drop policy if exists "search_exports_select" on public.search_exports;
+drop policy if exists "search_exports_insert" on public.search_exports;
+
 -- RLS: l'utente vede solo export dei progetti di cui è member (owner o member)
 create policy "search_exports_select" on public.search_exports
   for select
@@ -58,10 +62,13 @@ create policy "search_exports_insert" on public.search_exports
 -- controllando project_members. Per semplicità qui consentiamo read a tutti gli autenticati
 -- dato che la tabella search_exports ha RLS e la lista filtra già per progetto.
 
--- In alternativa, crea le policy da SQL (Storage policies):
+-- Bucket e policy Storage (idempotenti)
 insert into storage.buckets (id, name, public)
 values ('search-exports', 'search-exports', false)
 on conflict (id) do nothing;
+
+drop policy if exists "search_exports_upload" on storage.objects;
+drop policy if exists "search_exports_read" on storage.objects;
 
 create policy "search_exports_upload" on storage.objects
   for insert
