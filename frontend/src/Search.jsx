@@ -338,7 +338,13 @@ export default function Search() {
     setResults([])
     setProgress(0)
 
-    const domainList = parseInput(domains).map(normalizeDomain).filter((d) => d)
+    let domainList = parseInput(domains).map(normalizeDomain).filter((d) => d)
+    // Messaggero: un solo dominio in lista = una sola chiamata API, poi in export 12 righe (come Tiscali)
+    const messaggeroInList = domainList.filter((d) => MESSAGGERO_DOMAINS.has(d))
+    const otherDomains = domainList.filter((d) => !MESSAGGERO_DOMAINS.has(d))
+    const singleMessaggero = messaggeroInList.length > 0 ? [messaggeroInList[0]] : []
+    domainList = [...otherDomains, ...singleMessaggero]
+
     const articleList = parseInput(articles)
 
     if (domainList.length === 0 || articleList.length === 0) {
@@ -438,35 +444,37 @@ export default function Search() {
       const a = normalizeCheckText(r.article)
       const t = normalizeCheckText(r.title)
       const controllo = !t ? '' : t === a || t.includes(a) || a.includes(t) ? '' : 'controllo necessario'
-      rows.push({ Dominio: r.domain, Articolo: r.article, 'Query di Ricerca': r.searchQuery, 'Link Articolo': r.url, Titolo: r.title, Controllo: controllo })
       const domainNorm = String(r.domain || '').toLowerCase().trim().replace(/^www\./, '')
-      if (domainNorm === 'notizie.tiscali.it' && r.url && !r.error) {
-        const suffix = extractTiscaliArticoliSuffix(r.url)
-        if (suffix) {
-          for (const region of TISCALI_REGIONS) {
-            rows.push({
-              Dominio: `notizie.tiscali.it/regioni/${region}`,
-              Articolo: r.article,
-              'Query di Ricerca': r.searchQuery,
-              'Link Articolo': normalizeUrlJoin(`https://notizie.tiscali.it/regioni/${region}`, suffix),
-              Titolo: r.title,
-              Controllo: controllo,
-            })
-          }
+      const isMessaggero = MESSAGGERO_DOMAINS.has(domainNorm) && r.url && !r.error
+      const messaggeroSlug = isMessaggero ? extractMessaggeroVideoSlug(r.url) : null
+
+      if (isMessaggero && messaggeroSlug) {
+        // Messaggero: solo le 12 righe canoniche (nessuna riga "originale" duplicata)
+        for (const { base, dominio } of MESSAGGERO_BASES) {
+          rows.push({
+            Dominio: dominio,
+            Articolo: r.article,
+            'Query di Ricerca': r.searchQuery,
+            'Link Articolo': normalizeUrlJoin(base, messaggeroSlug),
+            Titolo: r.title,
+            Controllo: controllo,
+          })
         }
-      }
-      if (MESSAGGERO_DOMAINS.has(domainNorm) && r.url && !r.error) {
-        const slug = extractMessaggeroVideoSlug(r.url)
-        if (slug) {
-          for (const { base, dominio } of MESSAGGERO_BASES) {
-            rows.push({
-              Dominio: dominio,
-              Articolo: r.article,
-              'Query di Ricerca': r.searchQuery,
-              'Link Articolo': normalizeUrlJoin(base, slug),
-              Titolo: r.title,
-              Controllo: controllo,
-            })
+      } else {
+        rows.push({ Dominio: r.domain, Articolo: r.article, 'Query di Ricerca': r.searchQuery, 'Link Articolo': r.url, Titolo: r.title, Controllo: controllo })
+        if (domainNorm === 'notizie.tiscali.it' && r.url && !r.error) {
+          const suffix = extractTiscaliArticoliSuffix(r.url)
+          if (suffix) {
+            for (const region of TISCALI_REGIONS) {
+              rows.push({
+                Dominio: `notizie.tiscali.it/regioni/${region}`,
+                Articolo: r.article,
+                'Query di Ricerca': r.searchQuery,
+                'Link Articolo': normalizeUrlJoin(`https://notizie.tiscali.it/regioni/${region}`, suffix),
+                Titolo: r.title,
+                Controllo: controllo,
+              })
+            }
           }
         }
       }
@@ -608,44 +616,44 @@ export default function Search() {
             ? ''
             : 'controllo necessario'
 
-      rows.push({
-        Dominio: r.domain,
-        Articolo: r.article,
-        'Query di Ricerca': r.searchQuery,
-        'Link Articolo': r.url,
-        Titolo: r.title,
-        Controllo: controllo,
-      })
-
       const domainNorm = String(r.domain || '').toLowerCase().trim().replace(/^www\./, '')
-      if (domainNorm === 'notizie.tiscali.it' && r.url && !r.error) {
-        const suffix = extractTiscaliArticoliSuffix(r.url)
-        if (suffix) {
-          for (const region of TISCALI_REGIONS) {
-            const targetBase = `https://notizie.tiscali.it/regioni/${region}`
-            rows.push({
-              Dominio: `notizie.tiscali.it/regioni/${region}`,
-              Articolo: r.article,
-              'Query di Ricerca': r.searchQuery,
-              'Link Articolo': normalizeUrlJoin(targetBase, suffix),
-              Titolo: r.title,
-              Controllo: controllo,
-            })
-          }
+      const isMessaggero = MESSAGGERO_DOMAINS.has(domainNorm) && r.url && !r.error
+      const messaggeroSlug = isMessaggero ? extractMessaggeroVideoSlug(r.url) : null
+
+      if (isMessaggero && messaggeroSlug) {
+        for (const { base, dominio } of MESSAGGERO_BASES) {
+          rows.push({
+            Dominio: dominio,
+            Articolo: r.article,
+            'Query di Ricerca': r.searchQuery,
+            'Link Articolo': normalizeUrlJoin(base, messaggeroSlug),
+            Titolo: r.title,
+            Controllo: controllo,
+          })
         }
-      }
-      if (MESSAGGERO_DOMAINS.has(domainNorm) && r.url && !r.error) {
-        const slug = extractMessaggeroVideoSlug(r.url)
-        if (slug) {
-          for (const { base, dominio } of MESSAGGERO_BASES) {
-            rows.push({
-              Dominio: dominio,
-              Articolo: r.article,
-              'Query di Ricerca': r.searchQuery,
-              'Link Articolo': normalizeUrlJoin(base, slug),
-              Titolo: r.title,
-              Controllo: controllo,
-            })
+      } else {
+        rows.push({
+          Dominio: r.domain,
+          Articolo: r.article,
+          'Query di Ricerca': r.searchQuery,
+          'Link Articolo': r.url,
+          Titolo: r.title,
+          Controllo: controllo,
+        })
+        if (domainNorm === 'notizie.tiscali.it' && r.url && !r.error) {
+          const suffix = extractTiscaliArticoliSuffix(r.url)
+          if (suffix) {
+            for (const region of TISCALI_REGIONS) {
+              const targetBase = `https://notizie.tiscali.it/regioni/${region}`
+              rows.push({
+                Dominio: `notizie.tiscali.it/regioni/${region}`,
+                Articolo: r.article,
+                'Query di Ricerca': r.searchQuery,
+                'Link Articolo': normalizeUrlJoin(targetBase, suffix),
+                Titolo: r.title,
+                Controllo: controllo,
+              })
+            }
           }
         }
       }
