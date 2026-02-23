@@ -49,6 +49,7 @@ const WP_INTERNAL_SEARCH_DOMAINS = new Set([
 ]);
 
 function normalizeDomainForChecks(domain) {
+  // Rimuovi solo protocollo e www. — NON togliere mai "motori." (set Messaggero)
   return String(domain || '')
     .trim()
     .toLowerCase()

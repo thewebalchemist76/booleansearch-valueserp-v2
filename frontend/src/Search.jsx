@@ -52,6 +52,42 @@ export default function Search() {
     'sardegna',
   ]
 
+  // Messaggero: cerca una volta su ilmessaggero, poi replica lo slug video su tutti i 12 siti
+  const MESSAGGERO_BASES = [
+    { base: 'https://www.ilmessaggero.it/video', dominio: 'Il Messaggero' },
+    { base: 'https://www.ilgazzettino.it/video', dominio: 'Il Gazzettino' },
+    { base: 'https://www.ilmattino.it/video', dominio: 'Il Mattino' },
+    { base: 'https://www.corriereadriatico.it/video', dominio: 'Corriere Adriatico' },
+    { base: 'https://www.quotidianodipuglia.it/video', dominio: 'Quotidiano di Puglia' },
+    { base: 'https://www.leggo.it/video', dominio: 'Leggo' },
+    { base: 'https://motori.ilmessaggero.it/video', dominio: 'Il Messaggero Motori' },
+    { base: 'https://motori.ilgazzettino.it/video', dominio: 'Il Gazzettino Motori' },
+    { base: 'https://motori.ilmattino.it/video', dominio: 'Il Mattino Motori' },
+    { base: 'https://motori.corriereadriatico.it/video', dominio: 'Corriere Adriatico Motori' },
+    { base: 'https://motori.quotidianodipuglia.it/video', dominio: 'Quotidiano di Puglia Motori' },
+    { base: 'https://motori.leggo.it/video', dominio: 'Leggo Motori' },
+  ]
+  const MESSAGGERO_DOMAINS = new Set([
+    'ilmessaggero.it',
+    'motori.ilmessaggero.it',
+    'www.ilmessaggero.it',
+    'ilgazzettino.it',
+    'motori.ilgazzettino.it',
+    'www.ilgazzettino.it',
+    'ilmattino.it',
+    'motori.ilmattino.it',
+    'www.ilmattino.it',
+    'corriereadriatico.it',
+    'motori.corriereadriatico.it',
+    'www.corriereadriatico.it',
+    'quotidianodipuglia.it',
+    'motori.quotidianodipuglia.it',
+    'www.quotidianodipuglia.it',
+    'leggo.it',
+    'motori.leggo.it',
+    'www.leggo.it',
+  ])
+
   const normalizeUrlJoin = (base, suffix) => {
     const b = String(base || '').replace(/\/+$/, '')
     const s = String(suffix || '').replace(/^\/+/, '')
@@ -62,6 +98,13 @@ export default function Search() {
     if (!url) return null
     const m = String(url).match(/\/articoli\/.+$/)
     return m ? m[0].replace(/^\/+/, '') : null
+  }
+
+  /** Da URL Messaggero (es. motori.ilmessaggero.it/video/askanews/xxx-9128431.html) estrae lo slug "xxx-9128431.html" da appendere a base/video/ */
+  const extractMessaggeroVideoSlug = (url) => {
+    if (!url) return null
+    const m = String(url).match(/\/video\/(?:askanews\/)?(.+)$/i)
+    return m ? m[1].replace(/^\/+/, '') : null
   }
 
   useEffect(() => {
@@ -240,7 +283,7 @@ export default function Search() {
   const normalizeDomain = (domain) => {
     if (!domain) return ''
     let raw = String(domain).trim()
-
+    // Rimuovi solo protocollo e www. — NON togliere mai "motori." (set Messaggero: motori.ilmessaggero.it, motori.leggo.it, ecc.)
     raw = raw.replace(/^https?:\/\//i, '').replace(/^www\./i, '')
     raw = raw.split('#')[0].split('?')[0]
     raw = raw.replace(/\/+$/g, '')
@@ -389,6 +432,21 @@ export default function Search() {
               Articolo: r.article,
               'Query di Ricerca': r.searchQuery,
               'Link Articolo': normalizeUrlJoin(`https://notizie.tiscali.it/regioni/${region}`, suffix),
+              Titolo: r.title,
+              Controllo: controllo,
+            })
+          }
+        }
+      }
+      if (MESSAGGERO_DOMAINS.has(domainNorm) && r.url && !r.error) {
+        const slug = extractMessaggeroVideoSlug(r.url)
+        if (slug) {
+          for (const { base, dominio } of MESSAGGERO_BASES) {
+            rows.push({
+              Dominio: dominio,
+              Articolo: r.article,
+              'Query di Ricerca': r.searchQuery,
+              'Link Articolo': normalizeUrlJoin(base, slug),
               Titolo: r.title,
               Controllo: controllo,
             })
@@ -549,6 +607,21 @@ export default function Search() {
               Articolo: r.article,
               'Query di Ricerca': r.searchQuery,
               'Link Articolo': normalizeUrlJoin(targetBase, suffix),
+              Titolo: r.title,
+              Controllo: controllo,
+            })
+          }
+        }
+      }
+      if (MESSAGGERO_DOMAINS.has(domainNorm) && r.url && !r.error) {
+        const slug = extractMessaggeroVideoSlug(r.url)
+        if (slug) {
+          for (const { base, dominio } of MESSAGGERO_BASES) {
+            rows.push({
+              Dominio: dominio,
+              Articolo: r.article,
+              'Query di Ricerca': r.searchQuery,
+              'Link Articolo': normalizeUrlJoin(base, slug),
               Titolo: r.title,
               Controllo: controllo,
             })

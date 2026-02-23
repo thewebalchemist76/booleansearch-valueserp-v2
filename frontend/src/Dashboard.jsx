@@ -19,7 +19,7 @@ function normalizeDomains(input) {
     .map((raw) => raw.split('?')[0])
     // rimuove slash finali
     .map((raw) => raw.replace(/\/+$/g, ''))
-    // separa host e path
+    // separa host e path (rimuovi solo www. — NON togliere mai "motori." per il set Messaggero)
     .map((raw) => {
       const firstSlash = raw.indexOf('/')
       const host = (firstSlash === -1 ? raw : raw.slice(0, firstSlash)).replace(/^www\./, '')
