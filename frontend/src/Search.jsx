@@ -88,6 +88,17 @@ export default function Search() {
     'www.leggo.it',
   ])
 
+  // Mappa dominio cercato → base URL (così ilmessaggero.it → www, motori.ilmessaggero.it → motori)
+  const MESSAGGERO_DOMAIN_TO_BASE = (() => {
+    const map = {}
+    for (const { base } of MESSAGGERO_BASES) {
+      const host = new URL(base).host
+      map[host] = base
+      if (host.startsWith('www.')) map[host.replace(/^www\./, '')] = base
+    }
+    return map
+  })()
+
   const normalizeUrlJoin = (base, suffix) => {
     const b = String(base || '').replace(/\/+$/, '')
     const s = String(suffix || '').replace(/^\/+/, '')
@@ -366,12 +377,18 @@ export default function Search() {
             })
 
             const data = await response.json()
+            let urlToStore = data.url || ''
+            if (MESSAGGERO_DOMAINS.has(domain) && data.url) {
+              const slug = extractMessaggeroVideoSlug(data.url)
+              const base = MESSAGGERO_DOMAIN_TO_BASE[domain]
+              if (slug && base) urlToStore = normalizeUrlJoin(base, slug)
+            }
 
             searchResults.push({
               domain,
               article,
               searchQuery: `site:${domain} "${article}"`,
-              url: data.url || '',
+              url: urlToStore,
               title: data.title || '',
               description: data.description || '',
               error: data.error || null,
@@ -417,7 +434,7 @@ export default function Search() {
   async function saveResultsToSupabase(resultsData) {
     const rows = []
     for (const r of resultsData) {
-      const normalizeCheckText = (v) => String(v || '').toLowerCase().trim().replace(/\s+/g, ' ')
+      const normalizeCheckText = (v) => String(v || '').toLowerCase().trim().replace(/\s+/g, ' ').replace(/\s*:\s*/g, ' ').replace(/\s+/g, ' ')
       const a = normalizeCheckText(r.article)
       const t = normalizeCheckText(r.title)
       const controllo = !t ? '' : t === a || t.includes(a) || a.includes(t) ? '' : 'controllo necessario'
@@ -522,6 +539,8 @@ export default function Search() {
         .toLowerCase()
         .trim()
         .replace(/\s+/g, ' ')
+        .replace(/\s*:\s*/g, ' ')
+        .replace(/\s+/g, ' ')
 
     const getControllo = (article, title) => {
       const a = normalizeCheckText(article)
@@ -577,6 +596,8 @@ export default function Search() {
         String(value || '')
           .toLowerCase()
           .trim()
+          .replace(/\s+/g, ' ')
+          .replace(/\s*:\s*/g, ' ')
           .replace(/\s+/g, ' ')
       const a = normalizeCheckText(r.article)
       const t = normalizeCheckText(r.title)
