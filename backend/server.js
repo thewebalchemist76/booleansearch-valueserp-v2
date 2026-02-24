@@ -28,24 +28,40 @@ function serpApiGetJson(params) {
 }
 
 // --- WP internal-search domains (not reliably indexed on Google/Bing) ---
+// Set "clone": stesso contenuto WP, si cerca solo sul primo (magazine-italia.it), path replicato su tutti
 const WP_INTERNAL_SEARCH_DOMAINS = new Set([
+  'magazine-italia.it',
   'forumitalia.info',
   'investimentinews.it',
   'primopiano24.it',
+  'notiziedi.it',
   'accadeora.it',
   'ondazzurra.com',
+  'ilgiornaleditorino.it',
+  'cronachedimilano.com',
+  'gazzettadigenova.it',
   'venezia24.com',
   'cronacheditrentoetrieste.it',
+  'ilcorrieredibologna.it',
   'corrierediancona.it',
+  'ilcorrieredifirenze.it',
   'notiziarioflegreo.it',
+  'cronachediabruzzoemolise.it',
   'cittadi.it',
-  'cittadinapoli.com',
-  'magazine-italia.it',
-  'cittadino.ca',
   'cronachedelmezzogiorno.it',
+  'cronachedibari.com',
   'cronachedellacalabria.it',
   'lacittadiroma.it',
+  'giovannilucianelli.it',
+  'campaniapress.it',
+  'corrieredipalermo.it',
   'corrieredellasardegna.it',
+  'corriereflegreo.it',
+  'cittadinapoli.com',
+  'radionapolicentro.it',
+  'comunicazionenazionale.it',
+  'appianews.it',
+  'cittadino.ca',
 ]);
 
 function normalizeDomainForChecks(domain) {

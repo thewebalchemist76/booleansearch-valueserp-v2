@@ -99,6 +99,52 @@ export default function Search() {
     return map
   })()
 
+  // Set clone WP: si cerca solo sul primo (magazine-italia.it), path replicato su tutti i siti
+  const CLONE_WP_BASES = [
+    { base: 'https://magazine-italia.it', dominio: 'Magazine' },
+    { base: 'https://www.forumitalia.info', dominio: 'Forum Italia' },
+    { base: 'https://www.investimentinews.it', dominio: 'Investimenti News' },
+    { base: 'https://primopiano24.it', dominio: 'Primo Piano 24' },
+    { base: 'https://notiziedi.it', dominio: 'Notizie Dì' },
+    { base: 'https://accadeora.it', dominio: 'Accade Ora' },
+    { base: 'https://www.ondazzurra.com', dominio: 'Onda Azzurra' },
+    { base: 'https://ilgiornaleditorino.it', dominio: 'Giornale di Torino' },
+    { base: 'https://cronachedimilano.com', dominio: 'Cronache di Milano' },
+    { base: 'https://gazzettadigenova.it', dominio: 'Gazzetta di Genova' },
+    { base: 'https://venezia24.com', dominio: 'Venezia 24' },
+    { base: 'https://cronacheditrentoetrieste.it', dominio: 'Cronache di Trento e Trieste' },
+    { base: 'https://ilcorrieredibologna.it', dominio: 'Corriere di Bologna' },
+    { base: 'https://corrierediancona.it', dominio: 'Corriere di Ancona' },
+    { base: 'https://ilcorrieredifirenze.it', dominio: 'Corriere di Firenze' },
+    { base: 'https://notiziarioflegreo.it', dominio: 'Notiziario Flegreo' },
+    { base: 'https://cronachediabruzzoemolise.it', dominio: 'Cronache di Abruzzo e Molise' },
+    { base: 'https://cittadi.it', dominio: 'Città Dì' },
+    { base: 'http://cronachedelmezzogiorno.it', dominio: 'Cronache del Mezzogiorno' },
+    { base: 'https://cronachedibari.com', dominio: 'Cronache di Bari' },
+    { base: 'https://cronachedellacalabria.it', dominio: 'Cronache della Calabria' },
+    { base: 'https://lacittadiroma.it', dominio: 'La Città di Roma' },
+    { base: 'https://www.giovannilucianelli.it', dominio: 'Buone Notizie da Napoli' },
+    { base: 'https://campaniapress.it', dominio: 'Campania press' },
+    { base: 'https://corrieredipalermo.it', dominio: 'Corriere di Palermo' },
+    { base: 'https://corrieredellasardegna.it', dominio: 'Corriere della Sardegna' },
+    { base: 'https://corriereflegreo.it', dominio: 'Corriere Flegreo' },
+    { base: 'https://cittadinapoli.com', dominio: 'Città di Napoli' },
+    { base: 'http://www.radionapolicentro.it', dominio: 'Radio Napoli Centro' },
+    { base: 'https://comunicazionenazionale.it', dominio: 'Comunicazione Nazionale' },
+    { base: 'https://appianews.it', dominio: 'Appia News' },
+  ]
+  const CLONE_WP_DOMAINS = new Set(
+    CLONE_WP_BASES.flatMap(({ base }) => {
+      const host = new URL(base).host
+      const norm = host.replace(/^www\./, '')
+      return [host, norm]
+    })
+  )
+  const CLONE_WP_FIRST_DOMAIN = (() => {
+    const u = new URL(CLONE_WP_BASES[0].base)
+    return u.host.replace(/^www\./, '')
+  })()
+
   const normalizeUrlJoin = (base, suffix) => {
     const b = String(base || '').replace(/\/+$/, '')
     const s = String(suffix || '').replace(/^\/+/, '')
@@ -339,11 +385,15 @@ export default function Search() {
     setProgress(0)
 
     let domainList = parseInput(domains).map(normalizeDomain).filter((d) => d)
-    // Messaggero: un solo dominio in lista = una sola chiamata API, poi in export 12 righe (come Tiscali)
+    // Messaggero: un solo dominio in lista = una sola chiamata API, poi in export 12 righe
     const messaggeroInList = domainList.filter((d) => MESSAGGERO_DOMAINS.has(d))
-    const otherDomains = domainList.filter((d) => !MESSAGGERO_DOMAINS.has(d))
+    const cloneWpInList = domainList.filter((d) => CLONE_WP_DOMAINS.has(d))
+    const otherDomains = domainList.filter(
+      (d) => !MESSAGGERO_DOMAINS.has(d) && !CLONE_WP_DOMAINS.has(d)
+    )
     const singleMessaggero = messaggeroInList.length > 0 ? [messaggeroInList[0]] : []
-    domainList = [...otherDomains, ...singleMessaggero]
+    const singleCloneWp = cloneWpInList.length > 0 ? [CLONE_WP_FIRST_DOMAIN] : []
+    domainList = [...otherDomains, ...singleMessaggero, ...singleCloneWp]
 
     const articleList = parseInput(articles)
 
@@ -445,10 +495,31 @@ export default function Search() {
       const t = normalizeCheckText(r.title)
       const controllo = !t ? '' : t === a || t.includes(a) || a.includes(t) ? '' : 'controllo necessario'
       const domainNorm = String(r.domain || '').toLowerCase().trim().replace(/^www\./, '')
+      const isCloneWp = CLONE_WP_DOMAINS.has(domainNorm) && r.url && !r.error
+      let cloneWpPath = null
+      if (isCloneWp) {
+        try {
+          cloneWpPath = new URL(r.url).pathname || ''
+        } catch (_) {}
+      }
       const isMessaggero = MESSAGGERO_DOMAINS.has(domainNorm) && r.url && !r.error
       const messaggeroSlug = isMessaggero ? extractMessaggeroVideoSlug(r.url) : null
 
-      if (isMessaggero && messaggeroSlug) {
+      if (isCloneWp && cloneWpPath) {
+        // Clone WP: una ricerca sul primo sito, path replicato su tutti i 31
+        for (const { base, dominio } of CLONE_WP_BASES) {
+          const baseClean = base.replace(/\/+$/, '')
+          const path = cloneWpPath.startsWith('/') ? cloneWpPath : `/${cloneWpPath}`
+          rows.push({
+            Dominio: dominio,
+            Articolo: r.article,
+            'Query di Ricerca': r.searchQuery,
+            'Link Articolo': `${baseClean}${path}`,
+            Titolo: r.title,
+            Controllo: controllo,
+          })
+        }
+      } else if (isMessaggero && messaggeroSlug) {
         // Messaggero: solo le 12 righe canoniche (nessuna riga "originale" duplicata)
         for (const { base, dominio } of MESSAGGERO_BASES) {
           rows.push({
@@ -617,10 +688,30 @@ export default function Search() {
             : 'controllo necessario'
 
       const domainNorm = String(r.domain || '').toLowerCase().trim().replace(/^www\./, '')
+      const isCloneWp = CLONE_WP_DOMAINS.has(domainNorm) && r.url && !r.error
+      let cloneWpPath = null
+      if (isCloneWp) {
+        try {
+          cloneWpPath = new URL(r.url).pathname || ''
+        } catch (_) {}
+      }
       const isMessaggero = MESSAGGERO_DOMAINS.has(domainNorm) && r.url && !r.error
       const messaggeroSlug = isMessaggero ? extractMessaggeroVideoSlug(r.url) : null
 
-      if (isMessaggero && messaggeroSlug) {
+      if (isCloneWp && cloneWpPath) {
+        for (const { base, dominio } of CLONE_WP_BASES) {
+          const baseClean = base.replace(/\/+$/, '')
+          const path = cloneWpPath.startsWith('/') ? cloneWpPath : `/${cloneWpPath}`
+          rows.push({
+            Dominio: dominio,
+            Articolo: r.article,
+            'Query di Ricerca': r.searchQuery,
+            'Link Articolo': `${baseClean}${path}`,
+            Titolo: r.title,
+            Controllo: controllo,
+          })
+        }
+      } else if (isMessaggero && messaggeroSlug) {
         for (const { base, dominio } of MESSAGGERO_BASES) {
           rows.push({
             Dominio: dominio,
