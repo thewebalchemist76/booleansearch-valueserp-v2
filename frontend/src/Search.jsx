@@ -510,10 +510,11 @@ export default function Search() {
         for (const { base, dominio } of CLONE_WP_BASES) {
           const baseClean = base.replace(/\/+$/, '')
           const path = cloneWpPath.startsWith('/') ? cloneWpPath : `/${cloneWpPath}`
+          const dominioHost = new URL(base).host.replace(/^www\./, '')
           rows.push({
-            Dominio: dominio,
+            Sito: dominio,
+            Dominio: dominioHost,
             Articolo: r.article,
-            'Query di Ricerca': r.searchQuery,
             'Link Articolo': `${baseClean}${path}`,
             Titolo: r.title,
             Controllo: controllo,
@@ -522,25 +523,26 @@ export default function Search() {
       } else if (isMessaggero && messaggeroSlug) {
         // Messaggero: solo le 12 righe canoniche (nessuna riga "originale" duplicata)
         for (const { base, dominio } of MESSAGGERO_BASES) {
+          const dominioHost = new URL(base).host.replace(/^www\./, '')
           rows.push({
-            Dominio: dominio,
+            Sito: dominio,
+            Dominio: dominioHost,
             Articolo: r.article,
-            'Query di Ricerca': r.searchQuery,
             'Link Articolo': normalizeUrlJoin(base, messaggeroSlug),
             Titolo: r.title,
             Controllo: controllo,
           })
         }
       } else {
-        rows.push({ Dominio: r.domain, Articolo: r.article, 'Query di Ricerca': r.searchQuery, 'Link Articolo': r.url, Titolo: r.title, Controllo: controllo })
+        rows.push({ Sito: r.domain, Dominio: domainNorm || r.domain, Articolo: r.article, 'Link Articolo': r.url, Titolo: r.title, Controllo: controllo })
         if (domainNorm === 'notizie.tiscali.it' && r.url && !r.error) {
           const suffix = extractTiscaliArticoliSuffix(r.url)
           if (suffix) {
             for (const region of TISCALI_REGIONS) {
               rows.push({
-                Dominio: `notizie.tiscali.it/regioni/${region}`,
+                Sito: `notizie.tiscali.it/regioni/${region}`,
+                Dominio: 'notizie.tiscali.it',
                 Articolo: r.article,
-                'Query di Ricerca': r.searchQuery,
                 'Link Articolo': normalizeUrlJoin(`https://notizie.tiscali.it/regioni/${region}`, suffix),
                 Titolo: r.title,
                 Controllo: controllo,
@@ -630,15 +632,18 @@ export default function Search() {
       return 'controllo necessario'
     }
 
-    const headers = ['Dominio', 'Articolo', 'Query di Ricerca', 'Link Articolo', 'Titolo', 'Controllo']
-    const rows = results.map((r) => [
-      r.domain,
-      r.article,
-      r.searchQuery,
-      r.url,
-      r.title,
-      getControllo(r.article, r.title),
-    ])
+    const headers = ['Sito', 'Dominio', 'Articolo', 'Link Articolo', 'Titolo', 'Controllo']
+    const rows = results.map((r) => {
+      const domainNorm = String(r.domain || '').toLowerCase().trim().replace(/^www\./, '')
+      return [
+        r.domain,
+        domainNorm || r.domain,
+        r.article,
+        r.url,
+        r.title,
+        getControllo(r.article, r.title),
+      ]
+    })
 
     const csvContent = [
       headers.join(','),
@@ -702,10 +707,11 @@ export default function Search() {
         for (const { base, dominio } of CLONE_WP_BASES) {
           const baseClean = base.replace(/\/+$/, '')
           const path = cloneWpPath.startsWith('/') ? cloneWpPath : `/${cloneWpPath}`
+          const dominioHost = new URL(base).host.replace(/^www\./, '')
           rows.push({
-            Dominio: dominio,
+            Sito: dominio,
+            Dominio: dominioHost,
             Articolo: r.article,
-            'Query di Ricerca': r.searchQuery,
             'Link Articolo': `${baseClean}${path}`,
             Titolo: r.title,
             Controllo: controllo,
@@ -713,10 +719,11 @@ export default function Search() {
         }
       } else if (isMessaggero && messaggeroSlug) {
         for (const { base, dominio } of MESSAGGERO_BASES) {
+          const dominioHost = new URL(base).host.replace(/^www\./, '')
           rows.push({
-            Dominio: dominio,
+            Sito: dominio,
+            Dominio: dominioHost,
             Articolo: r.article,
-            'Query di Ricerca': r.searchQuery,
             'Link Articolo': normalizeUrlJoin(base, messaggeroSlug),
             Titolo: r.title,
             Controllo: controllo,
@@ -724,9 +731,9 @@ export default function Search() {
         }
       } else {
         rows.push({
-          Dominio: r.domain,
+          Sito: r.domain,
+          Dominio: domainNorm || r.domain,
           Articolo: r.article,
-          'Query di Ricerca': r.searchQuery,
           'Link Articolo': r.url,
           Titolo: r.title,
           Controllo: controllo,
@@ -737,9 +744,9 @@ export default function Search() {
             for (const region of TISCALI_REGIONS) {
               const targetBase = `https://notizie.tiscali.it/regioni/${region}`
               rows.push({
-                Dominio: `notizie.tiscali.it/regioni/${region}`,
+                Sito: `notizie.tiscali.it/regioni/${region}`,
+                Dominio: 'notizie.tiscali.it',
                 Articolo: r.article,
-                'Query di Ricerca': r.searchQuery,
                 'Link Articolo': normalizeUrlJoin(targetBase, suffix),
                 Titolo: r.title,
                 Controllo: controllo,
