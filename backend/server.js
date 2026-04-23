@@ -717,4 +717,7 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`🔑 ValueSERP key: ${VALUESERP_KEY ? 'configured ✅' : 'MISSING ❌'}`);
   console.log(`🔑 SerpApi key: ${SERPAPI_KEY ? 'configured ✅' : 'MISSING ❌'}`);
+  const renderCommit = process.env.RENDER_GIT_COMMIT || process.env.RENDER_COMMIT || '';
+  if (renderCommit) console.log(`🧾 Render commit: ${renderCommit}`);
+  console.log(`🎬 Dailymotion owners enabled: ${Array.from(DAILYMOTION_ALLOWED_OWNERS).join(', ')}`);
 });
