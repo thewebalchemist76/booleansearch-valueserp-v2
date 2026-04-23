@@ -27,6 +27,9 @@ function serpApiGetJson(params) {
   });
 }
 
+// --- Dailymotion owners (search only within these channels) ---
+const DAILYMOTION_ALLOWED_OWNERS = new Set(['askanews', 'quotidianonazionale']);
+
 // --- WP internal-search domains (not reliably indexed on Google/Bing) ---
 // Set "clone": stesso contenuto WP, si cerca solo sul primo (magazine-italia.it), path replicato su tutti
 const WP_INTERNAL_SEARCH_DOMAINS = new Set([
@@ -80,6 +83,73 @@ function normalizeDomainForChecks(domain) {
 function isWpInternalDomain(domain) {
   const d = normalizeDomainForChecks(domain);
   return WP_INTERNAL_SEARCH_DOMAINS.has(d);
+}
+
+function parseDailymotionOwner(domain) {
+  // domain can be "dailymotion.com/askanews" (frontend keeps path for dailymotion.com)
+  const d = normalizeDomainForChecks(domain);
+  if (!d.startsWith('dailymotion.com/')) return null;
+  const owner = d.split('/')[1] || '';
+  return DAILYMOTION_ALLOWED_OWNERS.has(owner) ? owner : null;
+}
+
+function normalizeLooseTitle(text) {
+  return String(text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    // normalize smart quotes/apostrophes and punctuation to spaces
+    .replace(/[’'“”"]/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function scoreTitleMatch(query, candidate) {
+  const q = normalizeLooseTitle(query);
+  const c = normalizeLooseTitle(candidate);
+  if (!q || !c) return 0;
+  if (c === q) return 1000;
+  // token overlap score
+  const qt = new Set(q.split(' ').filter(Boolean));
+  const ct = new Set(c.split(' ').filter(Boolean));
+  let overlap = 0;
+  for (const t of qt) if (ct.has(t)) overlap++;
+  const ratio = overlap / Math.max(1, qt.size);
+  // bonus if candidate contains full query substring
+  const containsBonus = c.includes(q) ? 0.2 : 0;
+  return Math.round((ratio + containsBonus) * 1000);
+}
+
+async function searchDailymotionByOwner(owner, query) {
+  // Public data endpoint (no auth required for public videos):
+  // https://api.dailymotion.com/videos?owners=<owner>&search=<query>&fields=id,title,url&limit=...
+  const url =
+    `https://api.dailymotion.com/videos` +
+    `?owners=${encodeURIComponent(owner)}` +
+    `&search=${encodeURIComponent(query)}` +
+    `&fields=id,title,url` +
+    `&sort=relevance` +
+    `&limit=10`;
+
+  const res = await fetchWithTimeout(url, { method: 'GET', headers: { 'User-Agent': 'Mozilla/5.0' } }, 9000);
+  if (!res || !res.ok) return null;
+  const json = await res.json();
+  const list = Array.isArray(json.list) ? json.list : [];
+  if (list.length === 0) return null;
+
+  let best = null;
+  let bestScore = -1;
+  for (const item of list) {
+    const score = scoreTitleMatch(query, item.title);
+    if (score > bestScore) {
+      bestScore = score;
+      best = item;
+    }
+  }
+
+  if (!best || !best.url) return null;
+  return { url: best.url, title: best.title || '', description: '' };
 }
 
 // Headers that mimic a real browser (sites like cittadino.ca may serve different HTML to bots)
@@ -409,6 +479,30 @@ app.post('/api/search', async (req, res) => {
         description: '',
         error: 'Nessun risultato trovato',
         _build: 'cittadino-v2'  // se vedi questo nella risposta API, il codice nuovo è deployato
+      });
+    }
+
+    // --- DAILYMOTION owners (bypass Google/Bing) ---
+    // For domains like "dailymotion.com/askanews" or "dailymotion.com/quotidianonazionale"
+    const dmOwner = parseDailymotionOwner(cleanDomain);
+    if (dmOwner) {
+      console.log(`🔎 Dailymotion API: owner=${dmOwner} | query="${query}"`);
+      const found = await searchDailymotionByOwner(dmOwner, query);
+      if (found && found.url) {
+        console.log(`✅ Found (Dailymotion API): ${found.url}`);
+        return res.json({
+          url: found.url,
+          title: found.title || '',
+          description: found.description || '',
+          error: null
+        });
+      }
+      console.log('⚠️ No results found (Dailymotion API)');
+      return res.json({
+        url: '',
+        title: '',
+        description: '',
+        error: 'Nessun risultato trovato'
       });
     }
 
