@@ -490,7 +490,17 @@ export default function Search() {
   async function saveResultsToSupabase(resultsData) {
     const rows = []
     for (const r of resultsData) {
-      const normalizeCheckText = (v) => String(v || '').toLowerCase().trim().replace(/\s+/g, ' ').replace(/\s*:\s*/g, ' ').replace(/\s+/g, ' ')
+      const normalizeCheckText = (v) =>
+        String(v || '')
+          .toLowerCase()
+          // normalizza accenti e apostrofi “smart” (’ vs ')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[’‘`´]/g, "'")
+          .trim()
+          .replace(/\s+/g, ' ')
+          .replace(/\s*:\s*/g, ' ')
+          .replace(/\s+/g, ' ')
       const a = normalizeCheckText(r.article)
       const t = normalizeCheckText(r.title)
       const controllo = !t ? '' : t === a || t.includes(a) || a.includes(t) ? '' : 'controllo necessario'
@@ -618,6 +628,9 @@ export default function Search() {
     const normalizeCheckText = (value) =>
       String(value || '')
         .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/[’‘`´]/g, "'")
         .trim()
         .replace(/\s+/g, ' ')
         .replace(/\s*:\s*/g, ' ')
@@ -679,6 +692,9 @@ export default function Search() {
       const normalizeCheckText = (value) =>
         String(value || '')
           .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/[’‘`´]/g, "'")
           .trim()
           .replace(/\s+/g, ' ')
           .replace(/\s*:\s*/g, ' ')
