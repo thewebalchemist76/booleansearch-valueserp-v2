@@ -54,6 +54,15 @@ function Root() {
             </ProtectedRoute>
           }
         />
+        {/* alcuni hosting (es. static) aggiungono trailing slash: /dashboard/ */}
+        <Route
+          path="/dashboard/"
+          element={
+            <ProtectedRoute session={session} adminOnly={true}>
+              <Dashboard />
+            </ProtectedRoute>
+          }
+        />
 
         {/* TL/Admin only - dettaglio progetto */}
         <Route
