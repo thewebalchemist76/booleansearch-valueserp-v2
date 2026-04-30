@@ -31,10 +31,11 @@ export default function ProtectedRoute({ session, children, adminOnly = false })
         .from('admin_users')
         .select('user_id')
         .eq('user_id', userId)
-        .maybeSingle()
+        .limit(1)
 
       if (!mounted) return
-      if (!error && !!data) {
+      const hasAdminRow = Array.isArray(data) ? data.length > 0 : !!data
+      if (!error && hasAdminRow) {
         setIsAdmin(true)
         return
       }
@@ -46,10 +47,11 @@ export default function ProtectedRoute({ session, children, adminOnly = false })
         .eq('user_id', userId)
         .eq('role', 'owner')
         .limit(1)
-        .maybeSingle()
+        .limit(1)
 
       if (!mounted) return
-      setIsAdmin(!ownerErr && !!ownerData)
+      const hasOwnerRow = Array.isArray(ownerData) ? ownerData.length > 0 : !!ownerData
+      setIsAdmin(!ownerErr && hasOwnerRow)
     }
 
     check()
