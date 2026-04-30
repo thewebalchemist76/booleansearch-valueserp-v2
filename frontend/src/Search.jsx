@@ -493,6 +493,11 @@ export default function Search() {
       const normalizeCheckText = (v) =>
         String(v || '')
           .toLowerCase()
+          // decode common HTML entities (es. dell&#039;acciaio)
+          .replace(/&#0*39;|&#x0*27;|&apos;/gi, "'")
+          .replace(/&quot;/gi, '"')
+          .replace(/&nbsp;/gi, ' ')
+          .replace(/&amp;/gi, '&')
           // normalizza accenti e apostrofi “smart” (’ vs ')
           .normalize('NFD')
           .replace(/[\u0300-\u036f]/g, '')
@@ -628,6 +633,10 @@ export default function Search() {
     const normalizeCheckText = (value) =>
       String(value || '')
         .toLowerCase()
+        .replace(/&#0*39;|&#x0*27;|&apos;/gi, "'")
+        .replace(/&quot;/gi, '"')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/[’‘`´]/g, "'")
@@ -692,6 +701,10 @@ export default function Search() {
       const normalizeCheckText = (value) =>
         String(value || '')
           .toLowerCase()
+          .replace(/&#0*39;|&#x0*27;|&apos;/gi, "'")
+          .replace(/&quot;/gi, '"')
+          .replace(/&nbsp;/gi, ' ')
+          .replace(/&amp;/gi, '&')
           .normalize('NFD')
           .replace(/[\u0300-\u036f]/g, '')
           .replace(/[’‘`´]/g, "'")
