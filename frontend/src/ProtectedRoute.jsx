@@ -34,7 +34,22 @@ export default function ProtectedRoute({ session, children, adminOnly = false })
         .maybeSingle()
 
       if (!mounted) return
-      setIsAdmin(!error && !!data)
+      if (!error && !!data) {
+        setIsAdmin(true)
+        return
+      }
+
+      // Fallback: consider admin anche chi è OWNER di almeno un progetto
+      const { data: ownerData, error: ownerErr } = await supabase
+        .from('project_members')
+        .select('project_id')
+        .eq('user_id', userId)
+        .eq('role', 'owner')
+        .limit(1)
+        .maybeSingle()
+
+      if (!mounted) return
+      setIsAdmin(!ownerErr && !!ownerData)
     }
 
     check()
