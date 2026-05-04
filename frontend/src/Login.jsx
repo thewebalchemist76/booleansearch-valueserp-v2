@@ -53,7 +53,7 @@ export default function Login() {
           }
           window.history.replaceState(null, document.title, window.location.pathname + window.location.search)
 
-          if (linkType === 'invite' || linkType === 'signup') {
+          if (linkType === 'invite' || linkType === 'signup' || linkType === 'recovery') {
             sessionStorage.setItem(PENDING_INVITE_KEY, '1')
             setInviteSetup(true)
             return
@@ -179,9 +179,9 @@ export default function Login() {
 
         {inviteSetup && (
           <form onSubmit={saveInvitePassword} style={{ marginBottom: 20 }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: '1rem' }}>Primo accesso — imposta password</h3>
+            <h3 style={{ margin: '0 0 12px', fontSize: '1rem' }}>Imposta password</h3>
             <p style={{ marginBottom: 12, fontSize: 13, color: '#6b7280', lineHeight: 1.45 }}>
-              Hai accettato l&apos;invito. Scegli una password per entrare anche dalla pagina Login nei prossimi accessi.
+              Scegli una password per entrare anche dalla pagina Login nei prossimi accessi.
             </p>
             <div className="input-group">
               <label>Nuova password</label>
