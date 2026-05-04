@@ -1,7 +1,7 @@
 // frontend/src/Dashboard.jsx
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { supabase } from './supabaseClient'
+import { supabase, invokeEdgeFunction } from './supabaseClient'
 
 function normalizeDomains(input) {
   const lines = (input || '')
@@ -364,25 +364,17 @@ export default function Dashboard() {
     setError(null)
     setBanner(null)
 
-    const { data, error } = await supabase.functions.invoke('add-member-by-email', {
-      body: { project_id: selectedProjectId, email, role },
-    })
+    const { ok: httpOk, status: httpStatus, data } = await invokeEdgeFunction(
+      'add-member-by-email',
+      { project_id: selectedProjectId, email, role },
+    )
 
-    if (error) {
-      // supabase-js spesso mette il body dell’errore qui
-      let msg = error.message || 'Errore durante aggiunta membro.'
-      try {
-        const body = error.context?.body
-        if (typeof body === 'string') {
-          const parsed = JSON.parse(body)
-          if (parsed?.error) msg = parsed.error
-        } else if (body?.error) {
-          msg = body.error
-        }
-      } catch (_) {}
-
+    if (!httpOk) {
+      const detail =
+        (data && typeof data === 'object' && data.error && String(data.error)) ||
+        `Errore HTTP ${httpStatus || '?'} dalla Edge Function`
       setSaving(false)
-      setError(msg)
+      setError(detail)
       return
     }
 
