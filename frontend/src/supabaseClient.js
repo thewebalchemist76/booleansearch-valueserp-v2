@@ -11,8 +11,8 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    // Inviti / magic link: applica token da hash (?code= / #...) al caricamento
     detectSessionInUrl: true,
-    flowType: 'pkce',
+    // Gli inviti Supabase usano ancora token nell’hash (#access_token=…); pkce rompe quel flusso.
+    flowType: 'implicit',
   },
 })
