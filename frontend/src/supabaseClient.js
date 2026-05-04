@@ -7,4 +7,12 @@ if (!supabaseUrl || !supabaseAnonKey) {
   console.warn('Missing Supabase env vars')
 }
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey)
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: true,
+    autoRefreshToken: true,
+    // Inviti / magic link: applica token da hash (?code= / #...) al caricamento
+    detectSessionInUrl: true,
+    flowType: 'pkce',
+  },
+})

@@ -1,12 +1,58 @@
 // frontend/src/Login.jsx
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 
 export default function Login() {
+  const navigate = useNavigate()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    ;(async () => {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (cancelled) return
+      if (session?.user) {
+        navigate('/search', { replace: true })
+        return
+      }
+
+      const hash = window.location.hash.replace(/^#/, '')
+      if (hash) {
+        const p = new URLSearchParams(hash)
+        const errDesc = p.get('error_description')
+        const errCode = p.get('error')
+        if (errDesc || errCode) {
+          const raw = errDesc || errCode || ''
+          try {
+            setError(decodeURIComponent(String(raw).replace(/\+/g, ' ')))
+          } catch {
+            setError(raw)
+          }
+        }
+      }
+
+      const qs = new URLSearchParams(window.location.search)
+      const qErr = qs.get('error_description') || qs.get('error')
+      if (qErr && !cancelled) {
+        try {
+          setError(decodeURIComponent(String(qErr).replace(/\+/g, ' ')))
+        } catch {
+          setError(qErr)
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [navigate])
 
   const signIn = async (e) => {
     e.preventDefault()
