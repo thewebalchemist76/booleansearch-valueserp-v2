@@ -22,24 +22,6 @@ export default function Login() {
     setLoading(false)
   }
 
-  const signUp = async () => {
-    setLoading(true)
-    setError(null)
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-    })
-
-    if (error) {
-      setError(error.message)
-    } else {
-      setError('Account creato. Ora puoi accedere.')
-    }
-
-    setLoading(false)
-  }
-
   return (
     <div
       style={{
@@ -60,6 +42,11 @@ export default function Login() {
         }}
       >
         <h2 style={{ marginBottom: 16, textAlign: 'center' }}>Login</h2>
+
+        <p style={{ marginBottom: 16, fontSize: 13, color: '#6b7280', textAlign: 'center', lineHeight: 1.45 }}>
+          Accesso solo su invito: non è possibile creare un account da qui.
+          Se hai ricevuto un invito, usa il link nell&apos;email oppure accedi qui dopo aver impostato la password.
+        </p>
 
         {error && (
           <div className="error-message" style={{ marginBottom: 12 }}>
@@ -109,15 +96,6 @@ export default function Login() {
             {loading ? '⏳' : 'Accedi'}
           </button>
         </form>
-
-        <button
-          onClick={signUp}
-          className="download-button"
-          style={{ marginTop: 12, width: '100%' }}
-          disabled={loading}
-        >
-          Crea account
-        </button>
       </div>
     </div>
   )

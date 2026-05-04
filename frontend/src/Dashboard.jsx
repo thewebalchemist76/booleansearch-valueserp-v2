@@ -51,6 +51,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState(null)
+  const [banner, setBanner] = useState(null)
 
   const [projects, setProjects] = useState([])
   const [newProjectName, setNewProjectName] = useState('')
@@ -361,6 +362,7 @@ export default function Dashboard() {
 
     setSaving(true)
     setError(null)
+    setBanner(null)
 
     const { data, error } = await supabase.functions.invoke('add-member-by-email', {
       body: { project_id: selectedProjectId, email, role },
@@ -392,6 +394,21 @@ export default function Dashboard() {
 
     setNewMemberUserId('')
     await loadMembersForProject(selectedProjectId)
+
+    if (data.invited) {
+      setBanner(
+        'Utente nuovo: è stata inviata un’email di invito (Supabase). Il ruolo indicato sarà attivo dopo che accetta e imposta la password.',
+      )
+    } else if (data.notify_skipped) {
+      setBanner(
+        'Utente già registrato: associato al progetto. Per inviargli anche un’email di conferma, configurare RESEND_API_KEY sulla Edge Function.',
+      )
+    } else if (data.email_sent) {
+      setBanner('Associato al progetto; email di notifica inviata.')
+    } else {
+      setBanner('Associato al progetto.')
+    }
+
     setSaving(false)
   }
 
@@ -524,6 +541,13 @@ export default function Dashboard() {
           </div>
 
           {error && <div className="error-message">⚠️ {error}</div>}
+          {banner && (
+            <div className="progress-section" style={{ marginBottom: 12 }}>
+              <p className="progress-text" style={{ color: '#065f46' }}>
+                ✓ {banner}
+              </p>
+            </div>
+          )}
 
           <div className="form-section" style={{ marginBottom: 20 }}>
             <div className="input-group" style={{ marginBottom: 12 }}>
@@ -604,7 +628,10 @@ export default function Dashboard() {
                     fontSize: '0.95rem',
                   }}
                 />
-                <small>Inserisci l’email dell’utente (deve essere già registrato).</small>
+                <small>
+                  Inserisci l&apos;email: se l&apos;account non esiste viene inviato un invito Supabase; se esiste già
+                  riceve un&apos;email di conferma accesso (richiede provider email configurato sulla funzione).
+                </small>
               </div>
 
               <div className="input-group" style={{ marginBottom: 10 }}>
@@ -616,14 +643,17 @@ export default function Dashboard() {
                   disabled={saving}
                   style={{ width: '100%', padding: 12, borderRadius: 8 }}
                 >
-                  <option value="member">member</option>
-                  <option value="owner">owner</option>
+                  <option value="member">Membro (solo ricerca)</option>
+                  <option value="owner">Admin progetto (ricerca + dashboard)</option>
                 </select>
-                <small>member = può usare Search. owner = vede Dashboard/Search come TL.</small>
+                <small>
+                  Membro: usa solo la pagina Ricerca. Admin progetto: come ora <code>owner</code>, può gestire progetto,
+                  domini e membri.
+                </small>
               </div>
 
               <button className="search-button" onClick={addMember} disabled={saving || !newMemberUserId.trim()}>
-                {saving ? '⏳ Salvataggio...' : '➕ Aggiungi membro'}
+                {saving ? '⏳ Salvataggio...' : '➕ Invita / aggiungi utente'}
               </button>
 
               <div style={{ marginTop: 14 }}>

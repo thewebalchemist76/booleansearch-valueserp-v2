@@ -47,7 +47,6 @@ export default function ProtectedRoute({ session, children, adminOnly = false })
         .eq('user_id', userId)
         .eq('role', 'owner')
         .limit(1)
-        .limit(1)
 
       if (!mounted) return
       const hasOwnerRow = Array.isArray(ownerData) ? ownerData.length > 0 : !!ownerData
