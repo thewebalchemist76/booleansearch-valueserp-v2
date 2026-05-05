@@ -145,7 +145,13 @@ export default function Login() {
       password,
     })
 
-    if (error) setError(error.message)
+    if (error) {
+      setError(error.message)
+      setLoading(false)
+      return
+    }
+
+    navigate('/search', { replace: true })
     setLoading(false)
   }
 
