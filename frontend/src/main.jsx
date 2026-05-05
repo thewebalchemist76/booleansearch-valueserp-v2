@@ -43,7 +43,8 @@ function Root() {
       <Routes>
         <Route path="/" element={session ? <Navigate to="/search" replace /> : <Navigate to="/login" replace />} />
 
-        <Route path="/login" element={session ? <Navigate to="/search" replace /> : <Login />} />
+        {/* Login gestisce anche inviti/reset password; non fare redirect qui */} 
+        <Route path="/login" element={<Login />} />
 
         {/* TL/Admin only */}
         <Route

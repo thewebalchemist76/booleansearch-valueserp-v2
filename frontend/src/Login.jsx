@@ -22,6 +22,9 @@ export default function Login() {
     let cancelled = false
 
     ;(async () => {
+      const qs0 = new URLSearchParams(window.location.search)
+      const forceSetup = qs0.get('setup') === '1'
+
       if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(PENDING_INVITE_KEY) === '1') {
         const {
           data: { session },
@@ -53,7 +56,7 @@ export default function Login() {
           }
           window.history.replaceState(null, document.title, window.location.pathname + window.location.search)
 
-          if (linkType === 'invite' || linkType === 'signup' || linkType === 'recovery') {
+          if (forceSetup || linkType === 'invite' || linkType === 'signup' || linkType === 'recovery') {
             sessionStorage.setItem(PENDING_INVITE_KEY, '1')
             setInviteSetup(true)
             return
@@ -81,12 +84,13 @@ export default function Login() {
       if (cancelled) return
       const pendingInvite =
         typeof sessionStorage !== 'undefined' && sessionStorage.getItem(PENDING_INVITE_KEY) === '1'
-      if (session?.user && !pendingInvite) {
-        navigate('/search', { replace: true })
+      if (session?.user && (pendingInvite || forceSetup)) {
+        sessionStorage.setItem(PENDING_INVITE_KEY, '1')
+        setInviteSetup(true)
         return
       }
-      if (session?.user && pendingInvite) {
-        setInviteSetup(true)
+      if (session?.user && !pendingInvite) {
+        navigate('/search', { replace: true })
         return
       }
 

@@ -99,8 +99,18 @@ serve(async (req) => {
     }
 
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
-    const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const ANON_KEY =
+      Deno.env.get("SUPABASE_ANON_KEY") || Deno.env.get("SUPABASE_PUBLISHABLE_KEY");
+    const SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+    if (!ANON_KEY || !SERVICE_ROLE_KEY) {
+      return new Response(
+        JSON.stringify({ error: "Server misconfigured: missing Auth keys for Edge Function" }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        },
+      );
+    }
 
     const authHeader = req.headers.get("Authorization") || "";
 
@@ -163,7 +173,8 @@ serve(async (req) => {
       );
     }
 
-    const redirectTo = `${siteUrl}/login`;
+    // setup=1 forza schermata "Imposta password" dopo Accept invite
+    const redirectTo = `${siteUrl}/login?setup=1`;
     const roleLabel = role === "owner" ? "amministratore di progetto (dashboard)" : "membro (solo ricerca)";
 
     let targetUid = await findUserIdByEmail(supabaseAdmin, emailRaw);
@@ -200,6 +211,11 @@ serve(async (req) => {
       } else if (invData?.user?.id) {
         targetUid = invData.user.id;
         invitedNewUser = true;
+      } else {
+        // Risposta invite senza user.id: attendi replica Auth e risolvi per email
+        invitedNewUser = true;
+        await new Promise((r) => setTimeout(r, 500));
+        targetUid = await findUserIdByEmail(supabaseAdmin, emailRaw);
       }
     }
 
