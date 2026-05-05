@@ -201,7 +201,28 @@ export default function Dashboard() {
       return
     }
 
-    setMembers(data || [])
+    const rows = data || []
+
+    // Best-effort: arricchisci con email da profiles (se RLS lo consente).
+    // Se fallisce, lasciamo invariato (mostriamo user_id come prima).
+    try {
+      const ids = Array.from(new Set(rows.map((r) => r.user_id).filter(Boolean)))
+      if (ids.length) {
+        const { data: profs, error: profErr } = await supabase
+          .from('profiles')
+          .select('id,email')
+          .in('id', ids)
+
+        if (!profErr && Array.isArray(profs)) {
+          const map = new Map(profs.map((p) => [p.id, p.email]))
+          setMembers(rows.map((r) => ({ ...r, email: map.get(r.user_id) || null })))
+          setMembersLoading(false)
+          return
+        }
+      }
+    } catch (_) {}
+
+    setMembers(rows)
     setMembersLoading(false)
   }
 
@@ -658,7 +679,7 @@ export default function Dashboard() {
                     <table className="results-table">
                       <thead>
                         <tr>
-                          <th>User ID</th>
+                          <th>Utente</th>
                           <th>Ruolo</th>
                           <th>Creato</th>
                           <th></th>
@@ -667,7 +688,9 @@ export default function Dashboard() {
                       <tbody>
                         {members.map((m) => (
                           <tr key={`${m.project_id}-${m.user_id}`} className="success-row">
-                            <td style={{ fontFamily: 'monospace' }}>{m.user_id}</td>
+                            <td style={{ fontFamily: m.email ? 'inherit' : 'monospace' }}>
+                              {m.email || m.user_id}
+                            </td>
                             <td>{m.role}</td>
                             <td>{m.created_at ? new Date(m.created_at).toLocaleString('it-IT') : '-'}</td>
                             <td style={{ textAlign: 'right' }}>
