@@ -319,7 +319,9 @@ async function tryWpDirectUrl(domain, query) {
   // Fallback: WP internal search (?s=)
   try {
     const baseUrl = `https://${d}`;
-    const searchUrl = `${baseUrl}/?s=${encodeURIComponent(query)}`;
+    // magazine-italia.it: la ricerca interna funziona solo con query "pulita" (senza punteggiatura)
+    const searchQ = d === 'magazine-italia.it' ? normalizeSiteSearchQuery(query) : String(query || '');
+    const searchUrl = `${baseUrl}/?s=${encodeURIComponent(searchQ)}`;
     const headers = d === 'cittadino.ca' ? BROWSER_LIKE_HEADERS : { 'User-Agent': 'Mozilla/5.0' };
     const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers }, 9000);
 
