@@ -148,6 +148,64 @@ export default function Dashboard() {
     navigate(`/dashboard/${id}`, { replace: true })
   }
 
+  const renameProject = async (project) => {
+    if (!canCreate) return
+    const current = String(project?.name || '').trim()
+    const next = window.prompt('Nuovo nome progetto:', current)
+    if (next === null) return
+    const name = String(next).trim()
+    if (!name) {
+      setError('Nome progetto non valido.')
+      return
+    }
+    if (name === current) return
+
+    setSaving(true)
+    setError(null)
+    setBanner(null)
+
+    const { error: updErr } = await supabase.from('projects').update({ name }).eq('id', project.id)
+    if (updErr) {
+      setSaving(false)
+      setError(updErr.message)
+      return
+    }
+
+    await loadProjects()
+    setBanner('Progetto rinominato.')
+    setSaving(false)
+  }
+
+  const removeProjectById = async (project) => {
+    if (!canCreate) return
+    const label = project?.name ? ` "${project.name}"` : ''
+    const ok = window.confirm(`Sei sicuro di voler rimuovere il progetto${label}? Questa azione è irreversibile.`)
+    if (!ok) return
+
+    setSaving(true)
+    setError(null)
+    setBanner(null)
+
+    const { error: delErr } = await supabase.from('projects').delete().eq('id', project.id)
+    if (delErr) {
+      setSaving(false)
+      setError(delErr.message)
+      return
+    }
+
+    if (selectedProjectId === project.id) {
+      setSelectedProjectId(null)
+      setSitesRowId(null)
+      setDomainsText('')
+      setMembers([])
+      navigate('/dashboard', { replace: true })
+    }
+
+    await loadProjects()
+    setBanner('Progetto rimosso.')
+    setSaving(false)
+  }
+
   const loadDomainsForProject = async (pid) => {
     if (!pid) return
     setDomainsLoading(true)
@@ -608,6 +666,7 @@ export default function Dashboard() {
                   <tr>
                     <th>Nome progetto</th>
                     <th>Creato</th>
+                    <th style={{ width: 220 }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -623,6 +682,34 @@ export default function Dashboard() {
                         {selectedProjectId === p.id ? ' (selezionato)' : ''}
                       </td>
                       <td>{new Date(p.created_at).toLocaleString('it-IT')}</td>
+                      <td style={{ textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: 8 }}>
+                          <button
+                            className="download-button"
+                            disabled={saving}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              renameProject(p)
+                            }}
+                            title="Rinomina progetto"
+                          >
+                            Rename
+                          </button>
+                          <button
+                            className="download-button"
+                            disabled={saving}
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              removeProjectById(p)
+                            }}
+                            title="Rimuovi progetto"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
