@@ -27,10 +27,10 @@ function normalizeDomains(input) {
 
       const hostNoWww = host.toLowerCase()
 
-      // SOLO24ORE: qualsiasi sottodominio *.ilsole24ore.com va normalizzato a ilsole24.com
-      // (es. argomenti.ilsole24ore.com -> ilsole24.com)
+      // SOLO24ORE: qualsiasi sottodominio *.ilsole24ore.com va normalizzato a ilsole24ore.com
+      // (es. argomenti.ilsole24ore.com -> ilsole24ore.com)
       if (hostNoWww === 'ilsole24ore.com' || hostNoWww.endsWith('.ilsole24ore.com')) {
-        return 'ilsole24.com'
+        return 'ilsole24ore.com'
       }
 
       // SOLO per questi due domini manteniamo il path
