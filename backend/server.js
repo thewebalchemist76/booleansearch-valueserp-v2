@@ -18,7 +18,8 @@ app.use(express.json());
 
 function isMsnDomain(domain) {
   const d = (domain || '').toLowerCase().trim().replace(/^www\./, '');
-  return d === 'msn.com' || d.endsWith('.msn.com');
+  const host = d.split('/')[0] || '';
+  return host === 'msn.com' || host.endsWith('.msn.com');
 }
 
 function serpApiGetJson(params) {

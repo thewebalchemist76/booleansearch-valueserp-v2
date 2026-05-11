@@ -349,9 +349,13 @@ export default function Search() {
     const host = (firstSlash === -1 ? raw : raw.slice(0, firstSlash)).toLowerCase()
     const path = firstSlash === -1 ? '' : raw.slice(firstSlash)
 
-    // keep path only for youtube.com and dailymotion.com
+    // keep path for youtube.com, dailymotion.com, and msn.com (msn needs /it-it)
     if (host === 'youtube.com' || host === 'dailymotion.com') {
       return `${host}${path.replace(/\/+$/g, '')}`
+    }
+    if (host === 'msn.com') {
+      const cleanPath = path.replace(/\/+$/g, '')
+      return cleanPath ? `${host}${cleanPath}` : 'msn.com/it-it'
     }
 
     return host
