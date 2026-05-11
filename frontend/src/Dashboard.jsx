@@ -27,6 +27,12 @@ function normalizeDomains(input) {
 
       const hostNoWww = host.toLowerCase()
 
+      // SOLO24ORE: qualsiasi sottodominio *.ilsole24ore.com va normalizzato a ilsole24.com
+      // (es. argomenti.ilsole24ore.com -> ilsole24.com)
+      if (hostNoWww === 'ilsole24ore.com' || hostNoWww.endsWith('.ilsole24ore.com')) {
+        return 'ilsole24.com'
+      }
+
       // SOLO per questi due domini manteniamo il path
       if (hostNoWww === 'youtube.com' || hostNoWww === 'dailymotion.com') {
         const cleanPath = path.replace(/\/+$/g, '')
