@@ -164,10 +164,21 @@ export default function Dashboard() {
     setError(null)
     setBanner(null)
 
-    const { error: updErr } = await supabase.from('projects').update({ name }).eq('id', project.id)
+    const { data: updRows, error: updErr } = await supabase
+      .from('projects')
+      .update({ name })
+      .eq('id', project.id)
+      .select('id')
+      .limit(1)
+
     if (updErr) {
       setSaving(false)
       setError(updErr.message)
+      return
+    }
+    if (!updRows || updRows.length === 0) {
+      setSaving(false)
+      setError('Rename non riuscito: permessi insufficienti (RLS su projects).')
       return
     }
 
