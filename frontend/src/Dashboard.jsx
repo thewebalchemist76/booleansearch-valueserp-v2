@@ -494,7 +494,7 @@ export default function Dashboard() {
       )
     } else if (data.notify_skipped) {
       setBanner(
-        'Utente già registrato: associato al progetto. Per inviargli anche un’email di conferma, configurare RESEND_API_KEY sulla Edge Function.',
+        'Utente già registrato: associato al progetto.',
       )
     } else if (data.email_sent) {
       setBanner('Associato al progetto; email di notifica inviata.')
