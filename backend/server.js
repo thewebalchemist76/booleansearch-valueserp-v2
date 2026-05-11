@@ -436,6 +436,56 @@ async function tryCittadinoDirectAndSearch(domain, slug, query) {
   return null;
 }
 
+function normalizeSiteSearchQuery(text) {
+  // Per ricerche interne: togli punteggiatura e normalizza Unicode (simile al controllo frontend)
+  return String(text || '')
+    .toLowerCase()
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&#0*39;|&#x0*27;|&apos;/gi, "'")
+    .replace(/&#0*34;|&#x0*22;|&quot;/gi, '"')
+    .replace(/&amp;/gi, '&')
+    .replace(/[“”]/g, '"')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[’‘`´]/g, "'")
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+    .replace(/\s+/g, ' ');
+}
+
+function extractFirstNotizieSearchResultLink(html) {
+  if (!html) return '';
+  const text = String(html);
+  // <h3 class="aptica_listing_titles ... entry-title"><a href="...">
+  const m = text.match(
+    /<h3[^>]*class=["'][^"']*aptica_listing_titles[^"']*entry-title[^"']*["'][^>]*>[\s\S]*?<a[^>]+href=["']([^"']+)["']/i
+  );
+  if (m && m[1]) return m[1];
+  // fallback: first link to /<slug>/ on notizie.it
+  const m2 = text.match(/href=["'](https?:\/\/www\.notizie\.it\/[a-z0-9-]+\/)["']/i);
+  return (m2 && m2[1]) || '';
+}
+
+async function tryNotizieInternalSearch(query) {
+  const q = normalizeSiteSearchQuery(query);
+  if (!q) return null;
+  const searchUrl = `https://www.notizie.it/search/?q=${encodeURIComponent(q)}`;
+  try {
+    const res = await fetchWithTimeout(
+      searchUrl,
+      { method: 'GET', headers: BROWSER_LIKE_HEADERS },
+      12000
+    );
+    if (!res || !res.ok) return null;
+    const body = await res.text();
+    const firstLink = extractFirstNotizieSearchResultLink(body);
+    if (!firstLink) return null;
+    return { url: firstLink, title: '', description: '' };
+  } catch (_) {
+    return null;
+  }
+}
+
 // Health check
 app.get('/', (req, res) => {
   res.json({
@@ -505,6 +555,17 @@ app.post('/api/search', async (req, res) => {
         description: '',
         error: 'Nessun risultato trovato'
       });
+    }
+
+    // NOTIZIE.IT: ricerca interna del sito (più affidabile di Google per alcuni titoli)
+    if (cleanDomain === 'notizie.it' || cleanDomain === 'www.notizie.it') {
+      const found = await tryNotizieInternalSearch(query);
+      if (found && found.url) {
+        console.log(`✅ Found (notizie internal): ${found.url}`);
+        return res.json({ url: found.url, title: found.title || '', description: found.description || '', error: null });
+      }
+      console.log('⚠️ No results found (notizie internal)');
+      return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
     // MSN => Bing via SerpApi, everything else => Google via ValueSERP (unchanged)
