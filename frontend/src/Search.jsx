@@ -7,6 +7,27 @@ import * as XLSX from 'xlsx'
 
 const API_URL = import.meta.env.VITE_API_URL
 
+/** Caratteri di controllo / non-XML che spesso fanno comparire "Ripara cartella" in Excel. */
+const EXCEL_INVALID_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\uFFFE\uFFFF]/g
+const EXCEL_MAX_CELL_CHARS = 32767
+
+function sanitizeForExcelCell(value) {
+  if (value == null) return ''
+  const s = typeof value === 'string' ? value : String(value)
+  const cleaned = s.replace(EXCEL_INVALID_CHARS, '')
+  return cleaned.length > EXCEL_MAX_CELL_CHARS ? cleaned.slice(0, EXCEL_MAX_CELL_CHARS) : cleaned
+}
+
+function sanitizeExportRows(rows) {
+  return rows.map((row) => {
+    const out = {}
+    for (const [k, v] of Object.entries(row)) {
+      out[k] = sanitizeForExcelCell(v)
+    }
+    return out
+  })
+}
+
 export default function Search() {
   const navigate = useNavigate()
 
@@ -572,7 +593,7 @@ export default function Search() {
         }
       }
     }
-    const ws = XLSX.utils.json_to_sheet(rows)
+    const ws = XLSX.utils.json_to_sheet(sanitizeExportRows(rows))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Risultati')
     const now = new Date()
@@ -581,7 +602,7 @@ export default function Search() {
     const fileName = `AskaNews_${date}_${time}.xlsx`
     const filePath = `${userId}/${fileName}`
     // Genera bytes senza ArrayBuffer (evita "Unrecognized type arraybuffer" in alcuni ambienti)
-    const binary = XLSX.write(wb, { bookType: 'xlsx', type: 'binary' })
+    const binary = XLSX.write(wb, { bookType: 'xlsx', type: 'binary', compression: true })
     const bytes = new Uint8Array(binary.length)
     for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i) & 0xff
     const uploadBody = new Blob([bytes], {
@@ -791,7 +812,7 @@ export default function Search() {
       }
     }
 
-    const ws = XLSX.utils.json_to_sheet(rows)
+    const ws = XLSX.utils.json_to_sheet(sanitizeExportRows(rows))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Risultati')
 
@@ -799,7 +820,7 @@ export default function Search() {
     const date = now.toISOString().split('T')[0]
     const time = now.toTimeString().slice(0, 5).replace(':', '-')
     const fileName = `AskaNews_${date}_${time}.xlsx`
-    XLSX.writeFile(wb, fileName)
+    XLSX.writeFile(wb, fileName, { bookType: 'xlsx', compression: true })
     // L'export è già in "Tutte le ricerche" (salvato automaticamente al termine della ricerca)
   }
 
