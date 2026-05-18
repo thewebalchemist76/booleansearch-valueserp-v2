@@ -794,56 +794,51 @@ async function tryLospecialeSlugProbe(query) {
   return null;
 }
 
-/** ValueSERP/SerpApi: sceglie il risultato più simile al titolo (non il primo di Google) */
-async function tryLospecialeRemoteSearch(query) {
+/** lospecialegiornale.it: solo ValueSERP playground (engine=google, device=desktop) */
+async function searchLospecialeValueSerp(query) {
+  if (!VALUESERP_KEY) {
+    return { error: 'ValueSERP key non configurata' };
+  }
+
   const siteQ = `site:lospecialegiornale.it ${query}`;
+  const valueSerpUrl = buildValueSerpLospecialeUrl(siteQ);
+  console.log(`[lospeciale] ValueSERP desktop: ${siteQ}`);
 
-  if (VALUESERP_KEY) {
-    for (const [label, url] of [
-      ['desktop', buildValueSerpLospecialeUrl(siteQ)],
-      ['google.com/it', buildValueSerpGoogleComItUrl(siteQ)],
-    ]) {
-      try {
-        console.log(`[lospeciale] ValueSERP ${label}`);
-        const response = await fetch(url);
-        if (!response.ok) continue;
-        const data = await response.json();
-        if (data.request_info?.success === false) continue;
-        const best = pickBestLospecialeRemoteResult(parseValueSERPResults(data, query), query);
-        if (best?.url) {
-          console.log(`[lospeciale] ValueSERP ${label} ok: ${best.url}`);
-          return { url: best.url, title: best.title, description: best.description || '' };
-        }
-      } catch (e) {
-        console.log(`[lospeciale] ValueSERP ${label} error: ${e.message}`);
-      }
-    }
+  const response = await fetch(valueSerpUrl);
+  if (!response.ok) {
+    return { error: `Errore ValueSERP: HTTP ${response.status}` };
   }
 
-  if (SERPAPI_KEY) {
-    try {
-      console.log('[lospeciale] SerpApi Google');
-      const data = await serpApiGetJson({
-        engine: 'google',
-        q: siteQ,
-        google_domain: 'google.com',
-        hl: 'it',
-        gl: 'it',
-        api_key: SERPAPI_KEY,
-      });
-      if (data && !data.error) {
-        const best = pickBestLospecialeRemoteResult(parseValueSERPResults(data, query), query);
-        if (best?.url) {
-          console.log(`[lospeciale] SerpApi ok: ${best.url}`);
-          return { url: best.url, title: best.title, description: best.description || '' };
-        }
-      }
-    } catch (e) {
-      console.log(`[lospeciale] SerpApi error: ${e.message}`);
-    }
+  const data = await response.json();
+  if (data.request_info?.success === false) {
+    return { error: `Errore ValueSERP: ${data.request_info?.message || 'Unknown error'}` };
   }
 
-  return null;
+  const organic = data.organic_results || [];
+  const total = data.search_information?.total_results;
+  console.log(`[lospeciale] organic_results=${organic.length} total_results=${total}`);
+
+  for (const item of organic) {
+    if (!item.link || !item.title) continue;
+    if (!/lospecialegiornale\.it/i.test(String(item.link))) continue;
+    console.log(`[lospeciale] ok: ${item.link}`);
+    return {
+      result: {
+        url: item.link,
+        title: item.title,
+        description: item.snippet || '',
+      },
+    };
+  }
+
+  const parsed = parseValueSERPResults(data, query);
+  if (parsed.length > 0) {
+    console.log(`[lospeciale] ok (parsed): ${parsed[0].url}`);
+    return { result: parsed[0] };
+  }
+
+  console.log('[lospeciale] ValueSERP: nessun organic_results');
+  return { empty: true };
 }
 
 // Health check
@@ -928,15 +923,19 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
-    // LO SPECIALE: ?s= (ideale) → se 403 su Render: slug/data + ValueSERP con match titolo
+    // LO SPECIALE: solo ValueSERP (engine=google, device=desktop) — come playground
     if (isLospecialeDomain(cleanDomain)) {
-      let found = await tryLospecialeInternalSearch(query);
-      if (!found?.url) {
-        console.log('[lospeciale] internal 403/blocked — fallback slug + SERP filtrato');
-        found = (await tryLospecialeSlugProbe(query)) || (await tryLospecialeRemoteSearch(query));
+      const vs = await searchLospecialeValueSerp(query);
+      if (vs.error) {
+        return res.status(500).json({ url: '', title: '', description: '', error: vs.error });
       }
-      if (found?.url) {
-        return res.json({ url: found.url, title: found.title || '', description: found.description || '', error: null });
+      if (vs.result) {
+        return res.json({
+          url: vs.result.url,
+          title: vs.result.title,
+          description: vs.result.description,
+          error: null,
+        });
       }
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
