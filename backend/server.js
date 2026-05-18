@@ -50,6 +50,10 @@ function buildValueSerpMinimalUrl(q) {
   return `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(q)}&engine=google`;
 }
 
+function buildValueSerpLospecialeUrl(q) {
+  return `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(q)}&engine=google&device=desktop`;
+}
+
 async function searchValueSerp(valueSerpQuery, originalQuery, { googleComIt = false, minimal = false } = {}) {
   if (!VALUESERP_KEY) {
     return { error: 'ValueSERP key non configurata' };
@@ -796,7 +800,7 @@ async function tryLospecialeRemoteSearch(query) {
 
   if (VALUESERP_KEY) {
     for (const [label, url] of [
-      ['minimal', buildValueSerpMinimalUrl(siteQ)],
+      ['desktop', buildValueSerpLospecialeUrl(siteQ)],
       ['google.com/it', buildValueSerpGoogleComItUrl(siteQ)],
     ]) {
       try {
