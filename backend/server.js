@@ -645,7 +645,7 @@ app.post('/api/search', async (req, res) => {
     console.log(`🔍 Searching: ${searchQuery}`);
 
     // ValueSERP Google Search URL
-    const valueSerpUrl = `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(searchQuery)}&location=Italy&gl=it&hl=it&num=10`;
+    const valueSerpUrl = `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(searchQuery)}&location=United+States&gl=us&hl=en&google_domain=google.com&num=10`;
 
     console.log(`🌐 Fetching from ValueSERP...`);
 
