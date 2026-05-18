@@ -37,6 +37,44 @@ function isLospecialeDomain(domain) {
   return host === 'lospecialegiornale.it';
 }
 
+function isIlTempoDomain(domain) {
+  const host = normalizeDomainForChecks(domain).split('/')[0] || '';
+  return host === 'iltempo.it';
+}
+
+function buildValueSerpGoogleComItUrl(q) {
+  return `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(q)}&engine=google&hl=it&google_domain=google.com&num=10`;
+}
+
+async function searchValueSerp(valueSerpQuery, originalQuery, { googleComIt = false } = {}) {
+  if (!VALUESERP_KEY) {
+    return { error: 'ValueSERP key non configurata' };
+  }
+
+  const label = googleComIt ? 'ValueSERP google.com/it' : 'ValueSERP';
+  console.log(`🔍 Searching (${label}): ${valueSerpQuery}`);
+
+  const valueSerpUrl = googleComIt
+    ? buildValueSerpGoogleComItUrl(valueSerpQuery)
+    : `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google&hl=en&num=10`;
+
+  const response = await fetch(valueSerpUrl);
+  if (!response.ok) {
+    return { error: `Errore ValueSERP: HTTP ${response.status}` };
+  }
+
+  const data = await response.json();
+  if (data.request_info && data.request_info.success === false) {
+    return { error: `Errore ValueSERP: ${data.request_info.message || 'Unknown error'}` };
+  }
+
+  const results = parseValueSERPResults(data, originalQuery);
+  if (results.length > 0) {
+    return { result: results[0] };
+  }
+  return { empty: true };
+}
+
 function serpApiGetJson(params) {
   return new Promise((resolve) => {
     getJson(params, (json) => resolve(json));
@@ -561,23 +599,34 @@ function extractFirstLospecialeSearchResultLink(html) {
 }
 
 async function tryLospecialeInternalSearch(query) {
-  const q = String(query || '').trim();
-  if (!q) return null;
-  const searchUrl = `https://www.lospecialegiornale.it/?s=${encodeURIComponent(q)}`;
-  try {
-    const res = await fetchWithTimeout(
-      searchUrl,
-      { method: 'GET', headers: BROWSER_LIKE_HEADERS },
-      12000
-    );
-    if (!res || !res.ok) return null;
-    const body = await res.text();
-    const firstLink = extractFirstLospecialeSearchResultLink(body);
-    if (!firstLink) return null;
-    return { url: firstLink, title: '', description: '' };
-  } catch (_) {
-    return null;
+  const attempts = [String(query || '').trim(), normalizeSiteSearchQuery(query)].filter(
+    (q, i, arr) => q && arr.indexOf(q) === i,
+  );
+  const headers = {
+    ...BROWSER_LIKE_HEADERS,
+    Referer: 'https://www.lospecialegiornale.it/',
+  };
+
+  for (const q of attempts) {
+    const searchUrl = `https://www.lospecialegiornale.it/?s=${encodeURIComponent(q)}`;
+    try {
+      const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers }, 12000);
+      if (!res || !res.ok) {
+        console.log(`[lospeciale] ?s= status=${res ? res.status : 'none'} len=0`);
+        continue;
+      }
+      const body = await res.text();
+      const firstLink = extractFirstLospecialeSearchResultLink(body);
+      if (firstLink) {
+        console.log(`[lospeciale] internal ok: ${firstLink}`);
+        return { url: firstLink, title: '', description: '' };
+      }
+      console.log(`[lospeciale] ?s= ok but no article link in HTML (${body.length} bytes)`);
+    } catch (e) {
+      console.log(`[lospeciale] ?s= error: ${e.message}`);
+    }
   }
+  return null;
 }
 
 // Health check
@@ -662,15 +711,42 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
-    // LO SPECIALE: WP ?s= (ValueSERP/Bing spesso vuoti)
+    // LO SPECIALE: WP ?s=; se il sito blocca il server (403), fallback ValueSERP google.com
     if (isLospecialeDomain(cleanDomain)) {
-      console.log(`🔎 lospecialegiornale internal: query="${query}"`);
       const found = await tryLospecialeInternalSearch(query);
       if (found && found.url) {
-        console.log(`✅ Found (lospeciale internal): ${found.url}`);
         return res.json({ url: found.url, title: found.title || '', description: found.description || '', error: null });
       }
-      console.log('⚠️ No results found (lospeciale internal)');
+      console.log('⚠️ lospeciale internal empty, fallback ValueSERP google.com');
+      const vs = await searchValueSerp(`site:${cleanDomain} ${query}`, query, { googleComIt: true });
+      if (vs.error) {
+        return res.status(500).json({ url: '', title: '', description: '', error: vs.error });
+      }
+      if (vs.result) {
+        return res.json({
+          url: vs.result.url,
+          title: vs.result.title,
+          description: vs.result.description,
+          error: null,
+        });
+      }
+      return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
+    }
+
+    // IL TEMPO: ValueSERP solo google.com + hl=it
+    if (isIlTempoDomain(cleanDomain)) {
+      const vs = await searchValueSerp(`site:${cleanDomain} ${query}`, query, { googleComIt: true });
+      if (vs.error) {
+        return res.status(500).json({ url: '', title: '', description: '', error: vs.error });
+      }
+      if (vs.result) {
+        return res.json({
+          url: vs.result.url,
+          title: vs.result.title,
+          description: vs.result.description,
+          error: null,
+        });
+      }
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
@@ -706,66 +782,24 @@ app.post('/api/search', async (req, res) => {
       });
     }
 
-    // --- Default: Google via ValueSERP (original behavior, unchanged) ---
-    if (!VALUESERP_KEY) {
-      return res.status(500).json({ error: 'ValueSERP key non configurata' });
+    // --- Default: Google via ValueSERP ---
+    const vs = await searchValueSerp(`site:${cleanDomain} ${query}`, query);
+    if (vs.error) {
+      return res.status(500).json({ url: '', title: '', description: '', error: vs.error });
     }
-
-    const valueSerpQuery = `site:${cleanDomain} ${query}`;
-    console.log(`🔍 Searching (ValueSERP): ${valueSerpQuery}`);
-
-    const valueSerpUrl = `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google&hl=en&num=10`;
-
-    console.log(`🌐 Fetching from ValueSERP...`);
-
-    // Fetch from ValueSERP
-    const response = await fetch(valueSerpUrl);
-
-    if (!response.ok) {
-      console.error(`❌ ValueSERP error: ${response.status}`);
-      return res.status(500).json({
-        url: '',
-        title: '',
-        description: '',
-        error: `Errore ValueSERP: HTTP ${response.status}`
-      });
-    }
-
-    const data = await response.json();
-    console.log(`📄 ValueSERP response received`);
-
-    // Check for errors in response
-    if (data.request_info && data.request_info.success === false) {
-      console.error(`❌ ValueSERP error: ${data.request_info.message || 'Unknown error'}`);
-      return res.status(500).json({
-        url: '',
-        title: '',
-        description: '',
-        error: `Errore ValueSERP: ${data.request_info.message || 'Unknown error'}`
-      });
-    }
-
-    // Parse ValueSERP results
-    const results = parseValueSERPResults(data, query);
-
-    if (results.length > 0) {
-      const best = results[0];
-      console.log(`✅ Found: ${best.url}`);
-
+    if (vs.result) {
       return res.json({
-        url: best.url,
-        title: best.title,
-        description: best.description,
-        error: null
+        url: vs.result.url,
+        title: vs.result.title,
+        description: vs.result.description,
+        error: null,
       });
     }
-
-    console.log('⚠️ No results found');
     return res.json({
       url: '',
       title: '',
       description: '',
-      error: 'Nessun risultato trovato'
+      error: 'Nessun risultato trovato',
     });
 
   } catch (error) {
