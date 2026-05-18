@@ -106,7 +106,7 @@ const WP_INTERNAL_SEARCH_DOMAINS = new Set([
 
 function normalizeDomainForChecks(domain) {
   // Rimuovi solo protocollo e www. — NON togliere mai "motori." (set Messaggero)
-  return String(domain || '')
+  let d = String(domain || '')
     .trim()
     .toLowerCase()
     .replace(/^https?:\/\//i, '')
@@ -115,6 +115,15 @@ function normalizeDomainForChecks(domain) {
     .replace(/\.\*$/g, '')
     .replace(/\*$/g, '')
     .replace(/\.$/g, '');
+
+  const slash = d.indexOf('/');
+  const host = slash === -1 ? d : d.slice(0, slash);
+  const path = slash === -1 ? '' : d.slice(slash);
+  let hostNorm = host;
+  if (host === 'ilsole24ore.com' || host.endsWith('.ilsole24ore.com')) hostNorm = 'ilsole24ore.com';
+  else if (host === 'lanazione.it' || host.endsWith('.lanazione.it')) hostNorm = 'lanazione.it';
+  else if (host === 'quotidiano.net' || host.endsWith('.quotidiano.net')) hostNorm = 'quotidiano.net';
+  return hostNorm + path;
 }
 
 function isWpInternalDomain(domain) {

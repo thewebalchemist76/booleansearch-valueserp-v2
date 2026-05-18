@@ -38,6 +38,14 @@ function normalizeDomains(input) {
         return 'ilsole24ore.com'
       }
 
+      if (hostNoWww === 'lanazione.it' || hostNoWww.endsWith('.lanazione.it')) {
+        return 'lanazione.it'
+      }
+
+      if (hostNoWww === 'quotidiano.net' || hostNoWww.endsWith('.quotidiano.net')) {
+        return 'quotidiano.net'
+      }
+
       // SOLO per questi due domini manteniamo il path
       if (hostNoWww === 'youtube.com' || hostNoWww === 'dailymotion.com') {
         const cleanPath = path.replace(/\/+$/g, '')

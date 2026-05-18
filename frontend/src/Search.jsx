@@ -379,6 +379,10 @@ export default function Search() {
       return cleanPath ? `${host}${cleanPath}` : 'msn.com/it-it'
     }
 
+    if (host === 'lanazione.it' || host.endsWith('.lanazione.it')) return 'lanazione.it'
+    if (host === 'quotidiano.net' || host.endsWith('.quotidiano.net')) return 'quotidiano.net'
+    if (host === 'ilsole24ore.com' || host.endsWith('.ilsole24ore.com')) return 'ilsole24ore.com'
+
     return host
   }
 
