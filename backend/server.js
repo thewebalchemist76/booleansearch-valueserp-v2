@@ -22,10 +22,46 @@ function isMsnDomain(domain) {
   return host === 'msn.com' || host.endsWith('.msn.com');
 }
 
+function isLiberoDomain(domain) {
+  const host = normalizeDomainForChecks(domain).split('/')[0] || '';
+  return host === 'libero.it' || host.endsWith('.libero.it');
+}
+
 function serpApiGetJson(params) {
   return new Promise((resolve) => {
     getJson(params, (json) => resolve(json));
   });
+}
+
+/** Bing via SerpApi (MSN, libero.it — ValueSERP/Google spesso non indicizza bene libero) */
+async function searchSerpApiBing(bingQuery, originalQuery) {
+  if (!SERPAPI_KEY) {
+    return { error: 'SerpApi key non configurata (necessaria per questo dominio)' };
+  }
+
+  console.log(`🔍 Searching (Bing/SerpApi): ${bingQuery}`);
+
+  const data = await serpApiGetJson({
+    engine: 'bing',
+    q: bingQuery,
+    cc: 'IT',
+    api_key: SERPAPI_KEY,
+  });
+
+  if (data && data.error) {
+    console.error(`❌ SerpApi error: ${data.error}`);
+    return { error: `Errore SerpApi: ${data.error}` };
+  }
+
+  const results = parseValueSERPResults(data, originalQuery);
+  if (results.length > 0) {
+    const best = results[0];
+    console.log(`✅ Found (Bing/SerpApi): ${best.url}`);
+    return { result: best };
+  }
+
+  console.log('⚠️ No results found (Bing/SerpApi)');
+  return { empty: true };
 }
 
 // --- Dailymotion owners (search only within these channels) ---
@@ -570,51 +606,34 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
-    // MSN => Bing via SerpApi, everything else => Google via ValueSERP (unchanged)
-    if (isMsnDomain(cleanDomain)) {
-      if (!SERPAPI_KEY) {
-        return res.status(500).json({ error: 'SerpApi key non configurata (necessaria per msn.com)' });
-      }
+    // MSN + libero.it => Bing via SerpApi (libero: query senza virgolette, come nei test manuali)
+    if (isMsnDomain(cleanDomain) || isLiberoDomain(cleanDomain)) {
+      const bingQuery = isLiberoDomain(cleanDomain)
+        ? `site:${cleanDomain} ${query}`
+        : searchQuery;
 
-      console.log(`🔍 Searching (Bing/SerpApi): ${searchQuery}`);
-
-      const data = await serpApiGetJson({
-        engine: 'bing',
-        q: searchQuery,
-        cc: 'IT',
-        api_key: SERPAPI_KEY
-      });
-
-      if (data && data.error) {
-        console.error(`❌ SerpApi error: ${data.error}`);
+      const bing = await searchSerpApiBing(bingQuery, query);
+      if (bing.error) {
         return res.status(500).json({
           url: '',
           title: '',
           description: '',
-          error: `Errore SerpApi: ${data.error}`
+          error: bing.error,
         });
       }
-
-      const results = parseValueSERPResults(data, query);
-
-      if (results.length > 0) {
-        const best = results[0];
-        console.log(`✅ Found: ${best.url}`);
-
+      if (bing.result) {
         return res.json({
-          url: best.url,
-          title: best.title,
-          description: best.description,
-          error: null
+          url: bing.result.url,
+          title: bing.result.title,
+          description: bing.result.description,
+          error: null,
         });
       }
-
-      console.log('⚠️ No results found');
       return res.json({
         url: '',
         title: '',
         description: '',
-        error: 'Nessun risultato trovato'
+        error: 'Nessun risultato trovato',
       });
     }
 
