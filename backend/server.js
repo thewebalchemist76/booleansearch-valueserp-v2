@@ -32,8 +32,7 @@ function isQuotidianoDomain(domain) {
   return host === 'quotidiano.net' || host.endsWith('.quotidiano.net');
 }
 
-/** ValueSERP: solo q + engine=google (playground), senza hl/location/num */
-function isValueSerpMinimalDomain(domain) {
+function isLospecialeDomain(domain) {
   const host = normalizeDomainForChecks(domain).split('/')[0] || '';
   return host === 'lospecialegiornale.it';
 }
@@ -544,6 +543,43 @@ async function tryNotizieInternalSearch(query) {
   }
 }
 
+function extractFirstLospecialeSearchResultLink(html) {
+  if (!html) return '';
+  const text = String(html);
+  const re =
+    /href=["'](https?:\/\/(?:www\.)?lospecialegiornale\.it\/20\d{2}\/\d{2}\/\d{2}\/[a-z0-9-]+\/?)["']/gi;
+  const seen = new Set();
+  let m;
+  while ((m = re.exec(text)) !== null) {
+    const url = m[1].replace(/\/+$/, '') + '/';
+    const key = url.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    return url;
+  }
+  return '';
+}
+
+async function tryLospecialeInternalSearch(query) {
+  const q = String(query || '').trim();
+  if (!q) return null;
+  const searchUrl = `https://www.lospecialegiornale.it/?s=${encodeURIComponent(q)}`;
+  try {
+    const res = await fetchWithTimeout(
+      searchUrl,
+      { method: 'GET', headers: BROWSER_LIKE_HEADERS },
+      12000
+    );
+    if (!res || !res.ok) return null;
+    const body = await res.text();
+    const firstLink = extractFirstLospecialeSearchResultLink(body);
+    if (!firstLink) return null;
+    return { url: firstLink, title: '', description: '' };
+  } catch (_) {
+    return null;
+  }
+}
+
 // Health check
 app.get('/', (req, res) => {
   res.json({
@@ -626,6 +662,18 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
+    // LO SPECIALE: WP ?s= (ValueSERP/Bing spesso vuoti)
+    if (isLospecialeDomain(cleanDomain)) {
+      console.log(`🔎 lospecialegiornale internal: query="${query}"`);
+      const found = await tryLospecialeInternalSearch(query);
+      if (found && found.url) {
+        console.log(`✅ Found (lospeciale internal): ${found.url}`);
+        return res.json({ url: found.url, title: found.title || '', description: found.description || '', error: null });
+      }
+      console.log('⚠️ No results found (lospeciale internal)');
+      return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
+    }
+
     // MSN + libero.it + quotidiano.net => Bing via SerpApi (query senza virgolette)
     if (isMsnDomain(cleanDomain) || isLiberoDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)) {
       const bingQuery =
@@ -664,12 +712,9 @@ app.post('/api/search', async (req, res) => {
     }
 
     const valueSerpQuery = `site:${cleanDomain} ${query}`;
-    const valueSerpMinimal = isValueSerpMinimalDomain(cleanDomain);
-    console.log(`🔍 Searching (ValueSERP${valueSerpMinimal ? ', minimal' : ''}): ${valueSerpQuery}`);
+    console.log(`🔍 Searching (ValueSERP): ${valueSerpQuery}`);
 
-    const valueSerpUrl = valueSerpMinimal
-      ? `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google`
-      : `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google&hl=en&num=10`;
+    const valueSerpUrl = `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google&hl=en&num=10`;
 
     console.log(`🌐 Fetching from ValueSERP...`);
 
