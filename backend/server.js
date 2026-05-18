@@ -301,6 +301,31 @@ function slugify(text) {
     .replace(/-+/g, '-');
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function mergeCookiesFromResponse(res, existing = '') {
+  if (!res?.headers) return existing;
+  const raw = res.headers.get('set-cookie');
+  if (!raw) return existing;
+  const jar = new Map();
+  for (const part of existing.split(';')) {
+    const p = part.trim();
+    if (!p) continue;
+    const eq = p.indexOf('=');
+    if (eq > 0) jar.set(p.slice(0, eq), p.slice(eq + 1));
+  }
+  for (const chunk of raw.split(/,(?=\s*[^;,]+=)/)) {
+    const bit = chunk.split(';')[0].trim();
+    const eq = bit.indexOf('=');
+    if (eq > 0) jar.set(bit.slice(0, eq), bit.slice(eq + 1));
+  }
+  return Array.from(jar.entries())
+    .map(([k, v]) => `${k}=${v}`)
+    .join('; ');
+}
+
 async function fetchWithTimeout(url, opts = {}, timeoutMs = 8000) {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeoutMs);
@@ -616,55 +641,98 @@ async function tryNotizieInternalSearch(query) {
   }
 }
 
-function extractFirstLospecialeSearchResultLink(html) {
-  if (!html) return '';
-  const text = String(html);
+function pickBestLospecialeSearchResult(html, query) {
+  if (!html) return null;
+  const full = String(html);
+  const idx = full.search(/risultati\s+ricerca/i);
+  const text = idx !== -1 ? full.slice(idx, idx + 80000) : full;
   const base = 'https://www.lospecialegiornale.it';
-  const patterns = [
-    /href=["'](https?:\/\/(?:www\.)?lospecialegiornale\.it\/20\d{2}\/\d{2}\/\d{2}\/[a-z0-9-]+\/?)["']/gi,
-    /href=["'](\/20\d{2}\/\d{2}\/\d{2}\/[a-z0-9-]+\/?)["']/gi,
-  ];
+  const candidates = [];
   const seen = new Set();
-  for (const re of patterns) {
-    let m;
-    while ((m = re.exec(text)) !== null) {
-      let url = m[1].startsWith('/') ? `${base}${m[1]}` : m[1];
-      url = url.replace(/\/+$/, '') + '/';
-      const key = url.toLowerCase();
-      if (seen.has(key)) continue;
-      seen.add(key);
-      return url;
+
+  const h2LinkRe =
+    /<h2[^>]*>[\s\S]*?<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>[\s\S]*?<\/h2>/gi;
+  let m;
+  while ((m = h2LinkRe.exec(text)) !== null) {
+    let url = m[1].trim();
+    if (!/\/20\d{2}\/\d{2}\/\d{2}\//.test(url)) continue;
+    if (url.startsWith('/')) url = `${base}${url}`;
+    url = url.replace(/\/+$/, '') + '/';
+    const key = url.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const title = m[2]
+      .replace(/<[^>]+>/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    candidates.push({ url, title });
+  }
+
+  if (candidates.length === 0) return null;
+
+  let best = candidates[0];
+  let bestScore = calculateSimilarity(best.title || '', query);
+  for (let i = 1; i < candidates.length; i++) {
+    const score = calculateSimilarity(candidates[i].title || '', query);
+    if (score > bestScore) {
+      bestScore = score;
+      best = candidates[i];
     }
   }
-  return '';
+  return best;
 }
 
 async function tryLospecialeInternalSearch(query) {
-  const attempts = [String(query || '').trim(), normalizeSiteSearchQuery(query)].filter(
+  const base = 'https://www.lospecialegiornale.it';
+  const queries = [String(query || '').trim(), normalizeSiteSearchQuery(query)].filter(
     (q, i, arr) => q && arr.indexOf(q) === i,
   );
-  const headers = {
-    ...BROWSER_LIKE_HEADERS,
-    Referer: 'https://www.lospecialegiornale.it/',
-  };
+  if (queries.length === 0) return null;
 
-  for (const q of attempts) {
-    const searchUrl = `https://www.lospecialegiornale.it/?s=${encodeURIComponent(q)}`;
+  for (let round = 0; round < 2; round++) {
+    if (round > 0) {
+      console.log('[lospeciale] retry dopo delay...');
+      await sleep(2500);
+    }
+
+    let cookie = '';
     try {
-      const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers }, 12000);
-      if (!res || !res.ok) {
-        console.log(`[lospeciale] ?s= status=${res ? res.status : 'none'} len=0`);
-        continue;
+      const home = await fetchWithTimeout(`${base}/`, { method: 'GET', headers: BROWSER_LIKE_HEADERS }, 15000);
+      if (home) {
+        cookie = mergeCookiesFromResponse(home, cookie);
+        if (home.body) await home.text().catch(() => '');
+        console.log(`[lospeciale] homepage status=${home.status}`);
       }
-      const body = await res.text();
-      const firstLink = extractFirstLospecialeSearchResultLink(body);
-      if (firstLink) {
-        console.log(`[lospeciale] internal ok: ${firstLink}`);
-        return { url: firstLink, title: '', description: '' };
-      }
-      console.log(`[lospeciale] ?s= ok but no article link in HTML (${body.length} bytes)`);
     } catch (e) {
-      console.log(`[lospeciale] ?s= error: ${e.message}`);
+      console.log(`[lospeciale] homepage error: ${e.message}`);
+    }
+
+    await sleep(1800);
+
+    for (const q of queries) {
+      const searchUrl = `${base}/?s=${encodeURIComponent(q)}`;
+      const headers = {
+        ...BROWSER_LIKE_HEADERS,
+        Referer: `${base}/`,
+        ...(cookie ? { Cookie: cookie } : {}),
+      };
+      try {
+        const res = await fetchWithTimeout(searchUrl, { method: 'GET', headers }, 18000);
+        if (!res) continue;
+        const body = await res.text();
+        console.log(`[lospeciale] ?s= status=${res.status} bytes=${body.length} q="${q.slice(0, 50)}..."`);
+        if (!res.ok || res.status === 403) continue;
+        if (!/risultati\s+ricerca/i.test(body)) continue;
+
+        const best = pickBestLospecialeSearchResult(body, query);
+        if (best?.url) {
+          console.log(`[lospeciale] internal ok: ${best.url} (title match)`);
+          return { url: best.url, title: best.title || '', description: '' };
+        }
+      } catch (e) {
+        console.log(`[lospeciale] ?s= error: ${e.message}`);
+      }
+      await sleep(800);
     }
   }
   return null;
@@ -752,35 +820,12 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
-    // LO SPECIALE: WP ?s= (spesso 403 da Render) → ValueSERP playground → google.com → SerpApi
+    // LO SPECIALE: solo ricerca interna WP ?s= (no Google — risultati Google erano errati)
     if (isLospecialeDomain(cleanDomain)) {
-      const siteQ = `site:${cleanDomain} ${query}`;
-
       const found = await tryLospecialeInternalSearch(query);
       if (found && found.url) {
         return res.json({ url: found.url, title: found.title || '', description: found.description || '', error: null });
       }
-
-      for (const attempt of [
-        () => searchValueSerp(siteQ, query, { minimal: true }),
-        () => searchValueSerp(siteQ, query, { googleComIt: true }),
-        () => searchSerpApiBing(siteQ, query),
-        () => searchSerpApiGoogle(siteQ, query),
-      ]) {
-        const hit = await attempt();
-        if (hit.error) {
-          return res.status(500).json({ url: '', title: '', description: '', error: hit.error });
-        }
-        if (hit.result) {
-          return res.json({
-            url: hit.result.url,
-            title: hit.result.title,
-            description: hit.result.description,
-            error: null,
-          });
-        }
-      }
-
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
