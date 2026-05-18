@@ -46,17 +46,23 @@ function buildValueSerpGoogleComItUrl(q) {
   return `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(q)}&engine=google&hl=it&google_domain=google.com&num=10`;
 }
 
-async function searchValueSerp(valueSerpQuery, originalQuery, { googleComIt = false } = {}) {
+function buildValueSerpMinimalUrl(q) {
+  return `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(q)}&engine=google`;
+}
+
+async function searchValueSerp(valueSerpQuery, originalQuery, { googleComIt = false, minimal = false } = {}) {
   if (!VALUESERP_KEY) {
     return { error: 'ValueSERP key non configurata' };
   }
 
-  const label = googleComIt ? 'ValueSERP google.com/it' : 'ValueSERP';
+  const label = minimal ? 'ValueSERP minimal' : googleComIt ? 'ValueSERP google.com/it' : 'ValueSERP';
   console.log(`🔍 Searching (${label}): ${valueSerpQuery}`);
 
-  const valueSerpUrl = googleComIt
-    ? buildValueSerpGoogleComItUrl(valueSerpQuery)
-    : `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google&hl=en&num=10`;
+  const valueSerpUrl = minimal
+    ? buildValueSerpMinimalUrl(valueSerpQuery)
+    : googleComIt
+      ? buildValueSerpGoogleComItUrl(valueSerpQuery)
+      : `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google&hl=en&num=10`;
 
   const response = await fetch(valueSerpUrl);
   if (!response.ok) {
@@ -109,6 +115,35 @@ async function searchSerpApiBing(bingQuery, originalQuery) {
   }
 
   console.log('⚠️ No results found (Bing/SerpApi)');
+  return { empty: true };
+}
+
+/** Google via SerpApi (fallback quando ValueSERP è vuoto) */
+async function searchSerpApiGoogle(googleQuery, originalQuery) {
+  if (!SERPAPI_KEY) {
+    return { error: 'SerpApi key non configurata' };
+  }
+
+  console.log(`🔍 Searching (Google/SerpApi): ${googleQuery}`);
+
+  const data = await serpApiGetJson({
+    engine: 'google',
+    q: googleQuery,
+    google_domain: 'google.com',
+    hl: 'it',
+    gl: 'it',
+    api_key: SERPAPI_KEY,
+  });
+
+  if (data && data.error) {
+    return { error: `Errore SerpApi: ${data.error}` };
+  }
+
+  const results = parseValueSERPResults(data, originalQuery);
+  if (results.length > 0) {
+    console.log(`✅ Found (Google/SerpApi): ${results[0].url}`);
+    return { result: results[0] };
+  }
   return { empty: true };
 }
 
@@ -584,16 +619,22 @@ async function tryNotizieInternalSearch(query) {
 function extractFirstLospecialeSearchResultLink(html) {
   if (!html) return '';
   const text = String(html);
-  const re =
-    /href=["'](https?:\/\/(?:www\.)?lospecialegiornale\.it\/20\d{2}\/\d{2}\/\d{2}\/[a-z0-9-]+\/?)["']/gi;
+  const base = 'https://www.lospecialegiornale.it';
+  const patterns = [
+    /href=["'](https?:\/\/(?:www\.)?lospecialegiornale\.it\/20\d{2}\/\d{2}\/\d{2}\/[a-z0-9-]+\/?)["']/gi,
+    /href=["'](\/20\d{2}\/\d{2}\/\d{2}\/[a-z0-9-]+\/?)["']/gi,
+  ];
   const seen = new Set();
-  let m;
-  while ((m = re.exec(text)) !== null) {
-    const url = m[1].replace(/\/+$/, '') + '/';
-    const key = url.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    return url;
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(text)) !== null) {
+      let url = m[1].startsWith('/') ? `${base}${m[1]}` : m[1];
+      url = url.replace(/\/+$/, '') + '/';
+      const key = url.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      return url;
+    }
   }
   return '';
 }
@@ -711,25 +752,35 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
-    // LO SPECIALE: WP ?s=; se il sito blocca il server (403), fallback ValueSERP google.com
+    // LO SPECIALE: WP ?s= (spesso 403 da Render) → ValueSERP playground → google.com → SerpApi
     if (isLospecialeDomain(cleanDomain)) {
+      const siteQ = `site:${cleanDomain} ${query}`;
+
       const found = await tryLospecialeInternalSearch(query);
       if (found && found.url) {
         return res.json({ url: found.url, title: found.title || '', description: found.description || '', error: null });
       }
-      console.log('⚠️ lospeciale internal empty, fallback ValueSERP google.com');
-      const vs = await searchValueSerp(`site:${cleanDomain} ${query}`, query, { googleComIt: true });
-      if (vs.error) {
-        return res.status(500).json({ url: '', title: '', description: '', error: vs.error });
+
+      for (const attempt of [
+        () => searchValueSerp(siteQ, query, { minimal: true }),
+        () => searchValueSerp(siteQ, query, { googleComIt: true }),
+        () => searchSerpApiBing(siteQ, query),
+        () => searchSerpApiGoogle(siteQ, query),
+      ]) {
+        const hit = await attempt();
+        if (hit.error) {
+          return res.status(500).json({ url: '', title: '', description: '', error: hit.error });
+        }
+        if (hit.result) {
+          return res.json({
+            url: hit.result.url,
+            title: hit.result.title,
+            description: hit.result.description,
+            error: null,
+          });
+        }
       }
-      if (vs.result) {
-        return res.json({
-          url: vs.result.url,
-          title: vs.result.title,
-          description: vs.result.description,
-          error: null,
-        });
-      }
+
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
