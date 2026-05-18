@@ -738,6 +738,110 @@ async function tryLospecialeInternalSearch(query) {
   return null;
 }
 
+function lospecialeTitleMatchesQuery(title, query) {
+  const qWords = normalizeSiteSearchQuery(query)
+    .split(' ')
+    .filter((w) => w.length > 3);
+  const t = normalizeSiteSearchQuery(title);
+  if (!qWords.length || !t) return false;
+  const hits = qWords.filter((w) => t.includes(w)).length;
+  return hits >= Math.max(2, Math.ceil(qWords.length * 0.35));
+}
+
+function pickBestLospecialeRemoteResult(parsedResults, query) {
+  let best = null;
+  let bestScore = 0;
+  for (const r of parsedResults) {
+    if (!r.url || !/lospecialegiornale\.it\/20\d{2}\//i.test(r.url)) continue;
+    if (!lospecialeTitleMatchesQuery(r.title || '', query)) continue;
+    const score = calculateSimilarity(r.title || '', query);
+    if (score > bestScore) {
+      bestScore = score;
+      best = r;
+    }
+  }
+  return best;
+}
+
+/** Articolo WP: /YYYY/MM/DD/slug/ — utile quando ?s= è 403 su Render */
+async function tryLospecialeSlugProbe(query) {
+  const slug = slugify(query);
+  if (!slug || slug.length < 10) return null;
+  const base = 'https://www.lospecialegiornale.it';
+  const now = new Date();
+
+  for (let d = 0; d <= 60; d++) {
+    const date = new Date(now);
+    date.setUTCDate(date.getUTCDate() - d);
+    const y = date.getUTCFullYear();
+    const mo = String(date.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(date.getUTCDate()).padStart(2, '0');
+    const url = `${base}/${y}/${mo}/${day}/${slug}/`;
+    try {
+      const res = await fetchWithTimeout(url, { method: 'GET', headers: BROWSER_LIKE_HEADERS }, 10000);
+      if (!res || !res.ok) continue;
+      const title = extractHtmlTitle(await res.text());
+      if (lospecialeTitleMatchesQuery(title, query)) {
+        console.log(`[lospeciale] slug probe ok: ${url}`);
+        return { url, title, description: '' };
+      }
+    } catch (_) {}
+  }
+  return null;
+}
+
+/** ValueSERP/SerpApi: sceglie il risultato più simile al titolo (non il primo di Google) */
+async function tryLospecialeRemoteSearch(query) {
+  const siteQ = `site:lospecialegiornale.it ${query}`;
+
+  if (VALUESERP_KEY) {
+    for (const [label, url] of [
+      ['minimal', buildValueSerpMinimalUrl(siteQ)],
+      ['google.com/it', buildValueSerpGoogleComItUrl(siteQ)],
+    ]) {
+      try {
+        console.log(`[lospeciale] ValueSERP ${label}`);
+        const response = await fetch(url);
+        if (!response.ok) continue;
+        const data = await response.json();
+        if (data.request_info?.success === false) continue;
+        const best = pickBestLospecialeRemoteResult(parseValueSERPResults(data, query), query);
+        if (best?.url) {
+          console.log(`[lospeciale] ValueSERP ${label} ok: ${best.url}`);
+          return { url: best.url, title: best.title, description: best.description || '' };
+        }
+      } catch (e) {
+        console.log(`[lospeciale] ValueSERP ${label} error: ${e.message}`);
+      }
+    }
+  }
+
+  if (SERPAPI_KEY) {
+    try {
+      console.log('[lospeciale] SerpApi Google');
+      const data = await serpApiGetJson({
+        engine: 'google',
+        q: siteQ,
+        google_domain: 'google.com',
+        hl: 'it',
+        gl: 'it',
+        api_key: SERPAPI_KEY,
+      });
+      if (data && !data.error) {
+        const best = pickBestLospecialeRemoteResult(parseValueSERPResults(data, query), query);
+        if (best?.url) {
+          console.log(`[lospeciale] SerpApi ok: ${best.url}`);
+          return { url: best.url, title: best.title, description: best.description || '' };
+        }
+      }
+    } catch (e) {
+      console.log(`[lospeciale] SerpApi error: ${e.message}`);
+    }
+  }
+
+  return null;
+}
+
 // Health check
 app.get('/', (req, res) => {
   res.json({
@@ -820,10 +924,14 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
-    // LO SPECIALE: solo ricerca interna WP ?s= (no Google — risultati Google erano errati)
+    // LO SPECIALE: ?s= (ideale) → se 403 su Render: slug/data + ValueSERP con match titolo
     if (isLospecialeDomain(cleanDomain)) {
-      const found = await tryLospecialeInternalSearch(query);
-      if (found && found.url) {
+      let found = await tryLospecialeInternalSearch(query);
+      if (!found?.url) {
+        console.log('[lospeciale] internal 403/blocked — fallback slug + SERP filtrato');
+        found = (await tryLospecialeSlugProbe(query)) || (await tryLospecialeRemoteSearch(query));
+      }
+      if (found?.url) {
         return res.json({ url: found.url, title: found.title || '', description: found.description || '', error: null });
       }
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
