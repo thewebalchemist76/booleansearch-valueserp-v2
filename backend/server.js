@@ -651,10 +651,10 @@ app.post('/api/search', async (req, res) => {
       return res.status(500).json({ error: 'ValueSERP key non configurata' });
     }
 
-    console.log(`🔍 Searching: ${searchQuery}`);
+    const valueSerpQuery = `site:${cleanDomain} ${query}`;
+    console.log(`🔍 Searching (ValueSERP): ${valueSerpQuery}`);
 
-    // ValueSERP Google Search URL
-    const valueSerpUrl = `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(searchQuery)}&location=United+States&gl=us&hl=en&google_domain=google.com&num=10`;
+    const valueSerpUrl = `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google&hl=en&num=10`;
 
     console.log(`🌐 Fetching from ValueSERP...`);
 
