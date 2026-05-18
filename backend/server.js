@@ -27,13 +27,24 @@ function isLiberoDomain(domain) {
   return host === 'libero.it' || host.endsWith('.libero.it');
 }
 
+function isQuotidianoDomain(domain) {
+  const host = normalizeDomainForChecks(domain).split('/')[0] || '';
+  return host === 'quotidiano.net' || host.endsWith('.quotidiano.net');
+}
+
+/** ValueSERP: solo q + engine=google (playground), senza hl/location/num */
+function isValueSerpMinimalDomain(domain) {
+  const host = normalizeDomainForChecks(domain).split('/')[0] || '';
+  return host === 'lospecialegiornale.it';
+}
+
 function serpApiGetJson(params) {
   return new Promise((resolve) => {
     getJson(params, (json) => resolve(json));
   });
 }
 
-/** Bing via SerpApi (MSN, libero.it — ValueSERP/Google spesso non indicizza bene libero) */
+/** Bing via SerpApi (MSN, libero.it, quotidiano.net — Google/ValueSERP spesso vuoto) */
 async function searchSerpApiBing(bingQuery, originalQuery) {
   if (!SERPAPI_KEY) {
     return { error: 'SerpApi key non configurata (necessaria per questo dominio)' };
@@ -615,11 +626,12 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
-    // MSN + libero.it => Bing via SerpApi (libero: query senza virgolette, come nei test manuali)
-    if (isMsnDomain(cleanDomain) || isLiberoDomain(cleanDomain)) {
-      const bingQuery = isLiberoDomain(cleanDomain)
-        ? `site:${cleanDomain} ${query}`
-        : searchQuery;
+    // MSN + libero.it + quotidiano.net => Bing via SerpApi (query senza virgolette)
+    if (isMsnDomain(cleanDomain) || isLiberoDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)) {
+      const bingQuery =
+        isLiberoDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)
+          ? `site:${cleanDomain} ${query}`
+          : searchQuery;
 
       const bing = await searchSerpApiBing(bingQuery, query);
       if (bing.error) {
@@ -652,9 +664,12 @@ app.post('/api/search', async (req, res) => {
     }
 
     const valueSerpQuery = `site:${cleanDomain} ${query}`;
-    console.log(`🔍 Searching (ValueSERP): ${valueSerpQuery}`);
+    const valueSerpMinimal = isValueSerpMinimalDomain(cleanDomain);
+    console.log(`🔍 Searching (ValueSERP${valueSerpMinimal ? ', minimal' : ''}): ${valueSerpQuery}`);
 
-    const valueSerpUrl = `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google&hl=en&num=10`;
+    const valueSerpUrl = valueSerpMinimal
+      ? `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google`
+      : `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google&hl=en&num=10`;
 
     console.log(`🌐 Fetching from ValueSERP...`);
 
