@@ -10,6 +10,7 @@ import Search from './Search.jsx'
 import Searches from './Searches.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
 import { supabase } from './supabaseClient.js'
+import { isPasswordSetupPending, markPasswordSetup } from './authPasswordSetup.js'
 
 function Root() {
   const [session, setSession] = useState(null)
@@ -25,7 +26,17 @@ function Root() {
       setLoading(false)
     })
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, newSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, newSession) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        markPasswordSetup('recovery')
+        setSession(newSession)
+        setLoading(false)
+        if (window.location.pathname !== '/login') {
+          window.location.replace('/login')
+        }
+        return
+      }
+
       setSession(newSession)
       setLoading(false)
     })
@@ -41,7 +52,16 @@ function Root() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/" element={session ? <Navigate to="/search" replace /> : <Navigate to="/login" replace />} />
+        <Route
+          path="/"
+          element={
+            session && !isPasswordSetupPending() ? (
+              <Navigate to="/search" replace />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
 
         {/* Login gestisce anche inviti/reset password; non fare redirect qui */} 
         <Route path="/login" element={<Login />} />

@@ -2,21 +2,12 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
-
-const PENDING_INVITE_KEY = 'pending_invite_password'
-const PENDING_SETUP_MODE_KEY = 'pending_password_setup_mode'
-
-function readSetupMode() {
-  if (typeof sessionStorage === 'undefined') return 'invite'
-  return sessionStorage.getItem(PENDING_SETUP_MODE_KEY) === 'recovery' ? 'recovery' : 'invite'
-}
-
-function markPasswordSetup(mode) {
-  if (typeof sessionStorage !== 'undefined') {
-    sessionStorage.setItem(PENDING_INVITE_KEY, '1')
-    sessionStorage.setItem(PENDING_SETUP_MODE_KEY, mode)
-  }
-}
+import {
+  clearPasswordSetup,
+  markPasswordSetup,
+  PENDING_INVITE_KEY,
+  readSetupMode,
+} from './authPasswordSetup'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -39,6 +30,15 @@ export default function Login() {
   useEffect(() => {
     let cancelled = false
 
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+      if (cancelled) return
+      if (event === 'PASSWORD_RECOVERY') {
+        markPasswordSetup('recovery')
+        setSetupMode('recovery')
+        setInviteSetup(true)
+      }
+    })
+
     ;(async () => {
       const qs0 = new URLSearchParams(window.location.search)
       const forceSetup = qs0.get('setup') === '1'
@@ -53,8 +53,7 @@ export default function Login() {
           setInviteSetup(true)
           return
         }
-        sessionStorage.removeItem(PENDING_INVITE_KEY)
-        sessionStorage.removeItem(PENDING_SETUP_MODE_KEY)
+        clearPasswordSetup()
       }
 
       const hash = window.location.hash.replace(/^#/, '')
@@ -106,8 +105,8 @@ export default function Login() {
       if (cancelled) return
       const pendingInvite =
         typeof sessionStorage !== 'undefined' && sessionStorage.getItem(PENDING_INVITE_KEY) === '1'
-      if (session?.user && (pendingInvite || forceSetup)) {
-        if (!pendingInvite) markPasswordSetup('invite')
+      if (session?.user && (pendingInvite || forceSetup || qs0.get('recovery') === '1')) {
+        if (!pendingInvite) markPasswordSetup(qs0.get('recovery') === '1' ? 'recovery' : 'invite')
         setSetupMode(readSetupMode())
         setInviteSetup(true)
         return
@@ -130,6 +129,7 @@ export default function Login() {
 
     return () => {
       cancelled = true
+      authListener?.subscription?.unsubscribe()
     }
   }, [navigate])
 
@@ -154,8 +154,7 @@ export default function Login() {
       return
     }
 
-    sessionStorage.removeItem(PENDING_INVITE_KEY)
-    sessionStorage.removeItem(PENDING_SETUP_MODE_KEY)
+    clearPasswordSetup()
     navigate('/search', { replace: true })
   }
 
@@ -169,7 +168,7 @@ export default function Login() {
     }
 
     setForgotLoading(true)
-    const redirectTo = `${window.location.origin}/login`
+    const redirectTo = `${window.location.origin}/login?recovery=1`
     const { error: resetErr } = await supabase.auth.resetPasswordForEmail(trimmed, { redirectTo })
     setForgotLoading(false)
 

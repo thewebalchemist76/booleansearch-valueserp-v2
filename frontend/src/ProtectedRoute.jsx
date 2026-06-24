@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
+import { isPasswordSetupPending } from './authPasswordSetup'
 
 export default function ProtectedRoute({ session, children, adminOnly = false }) {
   // null = non ancora verificato, true/false = verificato
@@ -61,6 +62,8 @@ export default function ProtectedRoute({ session, children, adminOnly = false })
   }, [adminOnly, session?.user?.id])
 
   if (!session) return <Navigate to="/login" replace />
+
+  if (isPasswordSetupPending()) return <Navigate to="/login" replace />
 
   if (adminOnly) {
     if (isAdmin === null) {
