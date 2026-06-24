@@ -1,7 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const https = require('https');
-const fetch = require('node-fetch');
+const nodeFetch = require('node-fetch');
 const { getJson } = require('serpapi');
 
 // Agent che ignora verifica SSL (solo per siti con catena certificati non riconosciuta da Node su Render, es. cittadino.ca)
@@ -54,6 +54,17 @@ function buildValueSerpLospecialeUrl(q) {
   return `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(q)}&engine=google&device=desktop`;
 }
 
+/** ValueSERP: fetch nativo Node (evita Premature close di node-fetch su Render). */
+async function fetchValueSerpApi(url) {
+  return globalThis.fetch(url, {
+    method: 'GET',
+    headers: {
+      Accept: 'application/json',
+      'User-Agent': 'BooleanSearch/1.0 (+https://ricerca.askacom.it)',
+    },
+  });
+}
+
 async function searchValueSerp(valueSerpQuery, originalQuery, { googleComIt = false, minimal = false } = {}) {
   if (!VALUESERP_KEY) {
     return { error: 'ValueSERP key non configurata' };
@@ -68,7 +79,12 @@ async function searchValueSerp(valueSerpQuery, originalQuery, { googleComIt = fa
       ? buildValueSerpGoogleComItUrl(valueSerpQuery)
       : `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google&hl=en&num=10`;
 
-  const response = await fetch(valueSerpUrl);
+  let response;
+  try {
+    response = await fetchValueSerpApi(valueSerpUrl);
+  } catch (e) {
+    return { error: `Errore ValueSERP: ${e.message}` };
+  }
   if (!response.ok) {
     return { error: `Errore ValueSERP: HTTP ${response.status}` };
   }
@@ -335,7 +351,7 @@ async function fetchWithTimeout(url, opts = {}, timeoutMs = 8000) {
   const id = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch(url, { ...opts, signal: controller.signal, redirect: 'follow' });
+    const res = await nodeFetch(url, { ...opts, signal: controller.signal, redirect: 'follow' });
     return res;
   } finally {
     clearTimeout(id);
@@ -804,7 +820,12 @@ async function searchLospecialeValueSerp(query) {
   const valueSerpUrl = buildValueSerpLospecialeUrl(siteQ);
   console.log(`[lospeciale] ValueSERP desktop: ${siteQ}`);
 
-  const response = await fetch(valueSerpUrl);
+  let response;
+  try {
+    response = await fetchValueSerpApi(valueSerpUrl);
+  } catch (e) {
+    return { error: `Errore ValueSERP: ${e.message}` };
+  }
   if (!response.ok) {
     return { error: `Errore ValueSERP: HTTP ${response.status}` };
   }
