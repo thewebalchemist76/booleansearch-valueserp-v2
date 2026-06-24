@@ -54,28 +54,6 @@ function buildValueSerpLospecialeUrl(q) {
   return `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(q)}&engine=google&device=desktop`;
 }
 
-async function fetchValueSerpJson(url, { retries = 3, timeoutMs = 60000 } = {}) {
-  let lastErr = null;
-  for (let attempt = 1; attempt <= retries; attempt++) {
-    try {
-      if (attempt > 1) {
-        console.log(`ValueSERP retry ${attempt}/${retries}...`);
-        await sleep(1500 * attempt);
-      }
-      const response = await fetchWithTimeout(url, { method: 'GET' }, timeoutMs);
-      if (!response.ok) {
-        lastErr = new Error(`HTTP ${response.status}`);
-        continue;
-      }
-      return await response.json();
-    } catch (e) {
-      lastErr = e;
-      console.error(`ValueSERP fetch attempt ${attempt} failed: ${e.message}`);
-    }
-  }
-  throw lastErr || new Error('ValueSERP fetch failed');
-}
-
 async function searchValueSerp(valueSerpQuery, originalQuery, { googleComIt = false, minimal = false } = {}) {
   if (!VALUESERP_KEY) {
     return { error: 'ValueSERP key non configurata' };
@@ -90,13 +68,12 @@ async function searchValueSerp(valueSerpQuery, originalQuery, { googleComIt = fa
       ? buildValueSerpGoogleComItUrl(valueSerpQuery)
       : `https://api.valueserp.com/search?api_key=${VALUESERP_KEY}&q=${encodeURIComponent(valueSerpQuery)}&engine=google&hl=en&num=10`;
 
-  let data;
-  try {
-    data = await fetchValueSerpJson(valueSerpUrl);
-  } catch (e) {
-    return { error: `Errore ValueSERP: ${e.message}` };
+  const response = await fetch(valueSerpUrl);
+  if (!response.ok) {
+    return { error: `Errore ValueSERP: HTTP ${response.status}` };
   }
 
+  const data = await response.json();
   if (data.request_info && data.request_info.success === false) {
     return { error: `Errore ValueSERP: ${data.request_info.message || 'Unknown error'}` };
   }
@@ -827,13 +804,12 @@ async function searchLospecialeValueSerp(query) {
   const valueSerpUrl = buildValueSerpLospecialeUrl(siteQ);
   console.log(`[lospeciale] ValueSERP desktop: ${siteQ}`);
 
-  let data;
-  try {
-    data = await fetchValueSerpJson(valueSerpUrl);
-  } catch (e) {
-    return { error: `Errore ValueSERP: ${e.message}` };
+  const response = await fetch(valueSerpUrl);
+  if (!response.ok) {
+    return { error: `Errore ValueSERP: HTTP ${response.status}` };
   }
 
+  const data = await response.json();
   if (data.request_info?.success === false) {
     return { error: `Errore ValueSERP: ${data.request_info?.message || 'Unknown error'}` };
   }
@@ -964,8 +940,8 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
-    // IL TEMPO + libero.it: ValueSERP google.com + hl=it
-    if (isIlTempoDomain(cleanDomain) || isLiberoDomain(cleanDomain)) {
+    // IL TEMPO: ValueSERP solo google.com + hl=it
+    if (isIlTempoDomain(cleanDomain)) {
       const vs = await searchValueSerp(`site:${cleanDomain} ${query}`, query, { googleComIt: true });
       if (vs.error) {
         return res.status(500).json({ url: '', title: '', description: '', error: vs.error });
@@ -981,11 +957,12 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
-    // MSN + quotidiano.net => Bing via SerpApi (query senza virgolette)
-    if (isMsnDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)) {
-      const bingQuery = isQuotidianoDomain(cleanDomain)
-        ? `site:${cleanDomain} ${query}`
-        : searchQuery;
+    // MSN + libero.it + quotidiano.net => Bing via SerpApi (query senza virgolette)
+    if (isMsnDomain(cleanDomain) || isLiberoDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)) {
+      const bingQuery =
+        isLiberoDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)
+          ? `site:${cleanDomain} ${query}`
+          : searchQuery;
 
       const bing = await searchSerpApiBing(bingQuery, query);
       if (bing.error) {
