@@ -4,6 +4,19 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 
 const PENDING_INVITE_KEY = 'pending_invite_password'
+const PENDING_SETUP_MODE_KEY = 'pending_password_setup_mode'
+
+function readSetupMode() {
+  if (typeof sessionStorage === 'undefined') return 'invite'
+  return sessionStorage.getItem(PENDING_SETUP_MODE_KEY) === 'recovery' ? 'recovery' : 'invite'
+}
+
+function markPasswordSetup(mode) {
+  if (typeof sessionStorage !== 'undefined') {
+    sessionStorage.setItem(PENDING_INVITE_KEY, '1')
+    sessionStorage.setItem(PENDING_SETUP_MODE_KEY, mode)
+  }
+}
 
 export default function Login() {
   const navigate = useNavigate()
@@ -12,11 +25,16 @@ export default function Login() {
   const [error, setError] = useState(null)
   const [loading, setLoading] = useState(false)
 
-  /** Dopo click sul link invito: sessione creata da hash; qui si imposta la password per i login futuri */
+  /** Dopo click sul link invito/recovery: sessione da hash; qui si imposta la password */
   const [inviteSetup, setInviteSetup] = useState(false)
+  const [setupMode, setSetupMode] = useState('invite')
   const [invitePw, setInvitePw] = useState('')
   const [invitePw2, setInvitePw2] = useState('')
   const [inviteSaving, setInviteSaving] = useState(false)
+
+  const [forgotMode, setForgotMode] = useState(false)
+  const [forgotSent, setForgotSent] = useState(false)
+  const [forgotLoading, setForgotLoading] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -31,10 +49,12 @@ export default function Login() {
         } = await supabase.auth.getSession()
         if (cancelled) return
         if (session?.user) {
+          setSetupMode(readSetupMode())
           setInviteSetup(true)
           return
         }
         sessionStorage.removeItem(PENDING_INVITE_KEY)
+        sessionStorage.removeItem(PENDING_SETUP_MODE_KEY)
       }
 
       const hash = window.location.hash.replace(/^#/, '')
@@ -57,7 +77,9 @@ export default function Login() {
           window.history.replaceState(null, document.title, window.location.pathname + window.location.search)
 
           if (forceSetup || linkType === 'invite' || linkType === 'signup' || linkType === 'recovery') {
-            sessionStorage.setItem(PENDING_INVITE_KEY, '1')
+            const mode = linkType === 'recovery' ? 'recovery' : 'invite'
+            markPasswordSetup(mode)
+            setSetupMode(mode)
             setInviteSetup(true)
             return
           }
@@ -85,7 +107,8 @@ export default function Login() {
       const pendingInvite =
         typeof sessionStorage !== 'undefined' && sessionStorage.getItem(PENDING_INVITE_KEY) === '1'
       if (session?.user && (pendingInvite || forceSetup)) {
-        sessionStorage.setItem(PENDING_INVITE_KEY, '1')
+        if (!pendingInvite) markPasswordSetup('invite')
+        setSetupMode(readSetupMode())
         setInviteSetup(true)
         return
       }
@@ -132,7 +155,36 @@ export default function Login() {
     }
 
     sessionStorage.removeItem(PENDING_INVITE_KEY)
+    sessionStorage.removeItem(PENDING_SETUP_MODE_KEY)
     navigate('/search', { replace: true })
+  }
+
+  const requestPasswordReset = async (e) => {
+    e.preventDefault()
+    setError(null)
+    const trimmed = email.trim()
+    if (!trimmed) {
+      setError('Inserisci la tua email.')
+      return
+    }
+
+    setForgotLoading(true)
+    const redirectTo = `${window.location.origin}/login`
+    const { error: resetErr } = await supabase.auth.resetPasswordForEmail(trimmed, { redirectTo })
+    setForgotLoading(false)
+
+    if (resetErr) {
+      setError(resetErr.message)
+      return
+    }
+
+    setForgotSent(true)
+  }
+
+  const backToLogin = () => {
+    setForgotMode(false)
+    setForgotSent(false)
+    setError(null)
   }
 
   const signIn = async (e) => {
@@ -189,9 +241,13 @@ export default function Login() {
 
         {inviteSetup && (
           <form onSubmit={saveInvitePassword} style={{ marginBottom: 20 }}>
-            <h3 style={{ margin: '0 0 12px', fontSize: '1rem' }}>Imposta password</h3>
+            <h3 style={{ margin: '0 0 12px', fontSize: '1rem' }}>
+              {setupMode === 'recovery' ? 'Reimposta password' : 'Imposta password'}
+            </h3>
             <p style={{ marginBottom: 12, fontSize: 13, color: '#6b7280', lineHeight: 1.45 }}>
-              Scegli una password per entrare anche dalla pagina Login nei prossimi accessi.
+              {setupMode === 'recovery'
+                ? 'Scegli una nuova password per il tuo account.'
+                : 'Scegli una password per entrare anche dalla pagina Login nei prossimi accessi.'}
             </p>
             <div className="input-group">
               <label>Nuova password</label>
@@ -228,12 +284,74 @@ export default function Login() {
               />
             </div>
             <button type="submit" className="search-button" style={{ marginTop: 16 }} disabled={inviteSaving}>
-              {inviteSaving ? '⏳' : 'Salva password e continua'}
+              {inviteSaving
+                ? '⏳'
+                : setupMode === 'recovery'
+                  ? 'Salva nuova password e continua'
+                  : 'Salva password e continua'}
             </button>
           </form>
         )}
 
-        {!inviteSetup && (
+        {!inviteSetup && forgotMode && !forgotSent && (
+          <form onSubmit={requestPasswordReset}>
+            <h3 style={{ margin: '0 0 12px', fontSize: '1rem' }}>Password dimenticata?</h3>
+            <p style={{ marginBottom: 12, fontSize: 13, color: '#6b7280', lineHeight: 1.45 }}>
+              Inserisci l&apos;email con cui sei stato invitato. Ti invieremo un link per reimpostare la password.
+            </p>
+            <div className="input-group">
+              <label>Email</label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
+                style={{
+                  width: '100%',
+                  padding: 10,
+                  borderRadius: 6,
+                  border: '1px solid #e5e7eb',
+                }}
+                required
+              />
+            </div>
+            <button type="submit" className="search-button" style={{ marginTop: 16 }} disabled={forgotLoading}>
+              {forgotLoading ? '⏳' : 'Invia link di reset'}
+            </button>
+            <button
+              type="button"
+              onClick={backToLogin}
+              style={{
+                marginTop: 12,
+                width: '100%',
+                padding: 0,
+                border: 'none',
+                background: 'none',
+                color: '#2563eb',
+                fontSize: 13,
+                cursor: 'pointer',
+                textDecoration: 'underline',
+              }}
+            >
+              Torna al login
+            </button>
+          </form>
+        )}
+
+        {!inviteSetup && forgotMode && forgotSent && (
+          <div>
+            <h3 style={{ margin: '0 0 12px', fontSize: '1rem' }}>Controlla la tua email</h3>
+            <p style={{ marginBottom: 12, fontSize: 13, color: '#6b7280', lineHeight: 1.45 }}>
+              Se l&apos;indirizzo <strong>{email.trim()}</strong> è registrato, riceverai a breve un link per
+              reimpostare la password. Controlla anche la cartella spam.
+            </p>
+            <button type="button" className="search-button" onClick={backToLogin}>
+              Torna al login
+            </button>
+          </div>
+        )}
+
+        {!inviteSetup && !forgotMode && (
         <form onSubmit={signIn}>
           <div className="input-group">
             <label>Email</label>
@@ -265,6 +383,26 @@ export default function Login() {
               }}
               required
             />
+            <div style={{ marginTop: 8, textAlign: 'right' }}>
+              <button
+                type="button"
+                onClick={() => {
+                  setError(null)
+                  setForgotMode(true)
+                }}
+                style={{
+                  padding: 0,
+                  border: 'none',
+                  background: 'none',
+                  color: '#2563eb',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                Password dimenticata?
+              </button>
+            </div>
           </div>
 
           <button
