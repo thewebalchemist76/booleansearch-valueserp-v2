@@ -957,12 +957,28 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
-    // MSN + libero.it + quotidiano.net => Bing via SerpApi (query senza virgolette)
-    if (isMsnDomain(cleanDomain) || isLiberoDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)) {
-      const bingQuery =
-        isLiberoDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)
-          ? `site:${cleanDomain} ${query}`
-          : searchQuery;
+    // LIBERO.IT: ValueSERP minimal (solo engine=google, come playground)
+    if (isLiberoDomain(cleanDomain)) {
+      const vs = await searchValueSerp(`site:${cleanDomain} ${query}`, query, { minimal: true });
+      if (vs.error) {
+        return res.status(500).json({ url: '', title: '', description: '', error: vs.error });
+      }
+      if (vs.result) {
+        return res.json({
+          url: vs.result.url,
+          title: vs.result.title,
+          description: vs.result.description,
+          error: null,
+        });
+      }
+      return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
+    }
+
+    // MSN + quotidiano.net => Bing via SerpApi (query senza virgolette)
+    if (isMsnDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)) {
+      const bingQuery = isQuotidianoDomain(cleanDomain)
+        ? `site:${cleanDomain} ${query}`
+        : searchQuery;
 
       const bing = await searchSerpApiBing(bingQuery, query);
       if (bing.error) {
