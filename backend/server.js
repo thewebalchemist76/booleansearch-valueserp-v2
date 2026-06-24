@@ -22,11 +22,6 @@ function isMsnDomain(domain) {
   return host === 'msn.com' || host.endsWith('.msn.com');
 }
 
-function isLiberoDomain(domain) {
-  const host = normalizeDomainForChecks(domain).split('/')[0] || '';
-  return host === 'libero.it' || host.endsWith('.libero.it');
-}
-
 function isQuotidianoDomain(domain) {
   const host = normalizeDomainForChecks(domain).split('/')[0] || '';
   return host === 'quotidiano.net' || host.endsWith('.quotidiano.net');
@@ -957,12 +952,11 @@ app.post('/api/search', async (req, res) => {
       return res.json({ url: '', title: '', description: '', error: 'Nessun risultato trovato' });
     }
 
-    // MSN + libero.it + quotidiano.net => Bing via SerpApi (query senza virgolette)
-    if (isMsnDomain(cleanDomain) || isLiberoDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)) {
-      const bingQuery =
-        isLiberoDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)
-          ? `site:${cleanDomain} ${query}`
-          : searchQuery;
+    // MSN + quotidiano.net => Bing via SerpApi (query senza virgolette)
+    if (isMsnDomain(cleanDomain) || isQuotidianoDomain(cleanDomain)) {
+      const bingQuery = isQuotidianoDomain(cleanDomain)
+        ? `site:${cleanDomain} ${query}`
+        : searchQuery;
 
       const bing = await searchSerpApiBing(bingQuery, query);
       if (bing.error) {
