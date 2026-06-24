@@ -4,6 +4,8 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from './supabaseClient'
 import {
   clearPasswordSetup,
+  clearStalePasswordSetup,
+  isAuthCallbackUrl,
   markPasswordSetup,
   PENDING_INVITE_KEY,
   readSetupMode,
@@ -43,12 +45,14 @@ export default function Login() {
       const qs0 = new URLSearchParams(window.location.search)
       const forceSetup = qs0.get('setup') === '1'
 
+      const {
+        data: { session: initialSession },
+      } = await supabase.auth.getSession()
+      if (cancelled) return
+      clearStalePasswordSetup(initialSession)
+
       if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(PENDING_INVITE_KEY) === '1') {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        if (cancelled) return
-        if (session?.user) {
+        if (initialSession?.user) {
           setSetupMode(readSetupMode())
           setInviteSetup(true)
           return
@@ -103,15 +107,16 @@ export default function Login() {
         data: { session },
       } = await supabase.auth.getSession()
       if (cancelled) return
+      clearStalePasswordSetup(session)
       const pendingInvite =
         typeof sessionStorage !== 'undefined' && sessionStorage.getItem(PENDING_INVITE_KEY) === '1'
-      if (session?.user && (pendingInvite || forceSetup || qs0.get('recovery') === '1')) {
-        if (!pendingInvite) markPasswordSetup(qs0.get('recovery') === '1' ? 'recovery' : 'invite')
+      if (session?.user && (pendingInvite || forceSetup)) {
+        if (!pendingInvite && forceSetup) markPasswordSetup('invite')
         setSetupMode(readSetupMode())
         setInviteSetup(true)
         return
       }
-      if (session?.user && !pendingInvite) {
+      if (session?.user && !pendingInvite && !isAuthCallbackUrl()) {
         navigate('/search', { replace: true })
         return
       }
@@ -155,6 +160,10 @@ export default function Login() {
     }
 
     clearPasswordSetup()
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname || '/login'
+      window.history.replaceState(null, document.title, path)
+    }
     navigate('/search', { replace: true })
   }
 
@@ -202,6 +211,7 @@ export default function Login() {
       return
     }
 
+    clearPasswordSetup()
     navigate('/search', { replace: true })
     setLoading(false)
   }

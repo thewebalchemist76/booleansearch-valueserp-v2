@@ -10,7 +10,7 @@ import Search from './Search.jsx'
 import Searches from './Searches.jsx'
 import ProtectedRoute from './ProtectedRoute.jsx'
 import { supabase } from './supabaseClient.js'
-import { isPasswordSetupPending, markPasswordSetup } from './authPasswordSetup.js'
+import { clearStalePasswordSetup, isPasswordSetupPending, markPasswordSetup } from './authPasswordSetup.js'
 
 function Root() {
   const [session, setSession] = useState(null)
@@ -22,6 +22,7 @@ function Root() {
     supabase.auth.getSession().then(({ data, error }) => {
       if (!isMounted) return
       if (error) console.error(error)
+      clearStalePasswordSetup(data?.session)
       setSession(data?.session ?? null)
       setLoading(false)
     })
